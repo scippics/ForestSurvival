@@ -1,0 +1,200 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+// Предмет в руках остаётся обычным динамическим телом: его тянет к HoldPosition сила
+// с ограничением. Поэтому тяжёлое отстаёт и провисает, а стены его останавливают.
+public class PlayerHands : MonoBehaviour
+{
+    const float MaxLiftForce = 350f;
+    const float PositionGain = 10f;
+    const float MaxCarrySpeed = 12f;
+    const float VelocityResponse = 15f;
+    const float RotationGain = 8f;
+    const float MaxAngularSpeed = 10f;
+    const float BreakDistance = 2f;
+    const float ThrowImpulse = 12f;
+
+    public FuelSiphon HeldSiphon { get; private set; }
+    public Rigidbody Held { get; private set; }
+
+    PlayerInputReader input;
+    BlueprintNotebook notebook;
+    Rigidbody playerBody;
+    Collider playerCollider;
+    Transform view;
+    Transform holdPosition;
+
+    Quaternion heldRotationOffset;
+    CollisionDetectionMode savedCollisionMode;
+    RigidbodyInterpolation savedInterpolation;
+    readonly Dictionary<GameObject, int> savedLayers = new Dictionary<GameObject, int>();
+    readonly List<Collider> heldColliders = new List<Collider>();
+    readonly List<Collider> pendingCollisionRestore = new List<Collider>();
+
+    void Awake()
+    {
+        input = GetComponent<PlayerInputReader>();
+        notebook = GetComponent<BlueprintNotebook>();
+        playerBody = GetComponent<Rigidbody>();
+        playerCollider = GetComponent<Collider>();
+        view = GetComponentInChildren<PlayerCamera>().transform;
+        holdPosition = view.Find("HoldPosition");
+    }
+
+    void FixedUpdate()
+    {
+        RestoreSeparatedCollisions();
+        HandleCommands();
+        UpdateSiphon();
+
+        if (Held != null)
+        {
+            if (Vector3.Distance(Held.worldCenterOfMass, holdPosition.position) > BreakDistance)
+                Release();
+            else
+                DriveHeld();
+        }
+    }
+
+    void HandleCommands()
+    {
+        if (input.ConsumeThrow() && Held != null)
+        {
+            Rigidbody thrown = Held;
+            Release();
+            thrown.AddForce(view.forward * ThrowImpulse, ForceMode.Impulse);
+        }
+
+        if (!input.ConsumeGrab())
+            return;
+
+        bool aimed = InteractionRay.Cast(view, out RaycastHit hit);
+        if (Held == null)
+        {
+            if (aimed && InteractionRay.IsPickupable(hit))
+                Grab(hit.rigidbody);
+        }
+        else if (aimed && InteractionRay.IsFuelTransfer(HeldSiphon, hit))
+        {
+            HeldSiphon.BeginPump();
+        }
+        else
+        {
+            Release();
+        }
+    }
+
+    // Качать можно только пока прицел на канистре: отвёл взгляд — попытка сорвалась.
+    void UpdateSiphon()
+    {
+        if (HeldSiphon == null || !HeldSiphon.IsPumping)
+            return;
+
+        if (InteractionRay.Cast(view, out RaycastHit hit) && InteractionRay.IsFuelTransfer(HeldSiphon, hit))
+            HeldSiphon.TickPump(input.GrabHeld, Time.fixedDeltaTime);
+        else
+            HeldSiphon.CancelPump();
+    }
+
+    void Grab(Rigidbody target)
+    {
+        if (target.TryGetComponent(out BlueprintItem blueprint))
+        {
+            notebook.AddRecipe(blueprint.recipeID);
+            Destroy(blueprint.gameObject);
+            return;
+        }
+
+        Held = target;
+        HeldSiphon = target.GetComponent<FuelSiphon>();
+        heldRotationOffset = Quaternion.Inverse(holdPosition.rotation) * target.rotation;
+
+        savedCollisionMode = target.collisionDetectionMode;
+        savedInterpolation = target.interpolation;
+        target.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        target.interpolation = RigidbodyInterpolation.Interpolate;
+
+        foreach (Transform part in target.GetComponentsInChildren<Transform>())
+        {
+            savedLayers[part.gameObject] = part.gameObject.layer;
+            part.gameObject.layer = InteractionRay.IgnoreRaycastLayer;
+        }
+
+        // Иначе можно встать на предмет в собственных руках и поднять себя в воздух.
+        target.GetComponentsInChildren(heldColliders);
+        foreach (Collider part in heldColliders)
+        {
+            pendingCollisionRestore.Remove(part);
+            Physics.IgnoreCollision(playerCollider, part, true);
+        }
+    }
+
+    public void ReleaseHeld()
+    {
+        if (Held != null)
+            Release();
+    }
+
+    void OnEnable()
+    {
+        // Нажатия, сделанные пока игрок сидел за рулём, не должны сработать при выходе.
+        if (input != null)
+        {
+            input.ConsumeGrab();
+            input.ConsumeThrow();
+        }
+    }
+
+    void Release()
+    {
+        if (HeldSiphon != null)
+            HeldSiphon.CancelPump();
+
+        Held.collisionDetectionMode = savedCollisionMode;
+        Held.interpolation = savedInterpolation;
+
+        foreach (KeyValuePair<GameObject, int> saved in savedLayers)
+            saved.Key.layer = saved.Value;
+        savedLayers.Clear();
+
+        pendingCollisionRestore.AddRange(heldColliders);
+        heldColliders.Clear();
+
+        Held = null;
+        HeldSiphon = null;
+    }
+
+    void DriveHeld()
+    {
+        Vector3 toTarget = holdPosition.position - Held.worldCenterOfMass;
+        Vector3 desired = playerBody.linearVelocity + Vector3.ClampMagnitude(toTarget * PositionGain, MaxCarrySpeed);
+        Vector3 force = Held.mass * ((desired - Held.linearVelocity) * VelocityResponse - Physics.gravity);
+        Held.AddForce(Vector3.ClampMagnitude(force, MaxLiftForce), ForceMode.Force);
+
+        Quaternion delta = holdPosition.rotation * heldRotationOffset * Quaternion.Inverse(Held.rotation);
+        delta.ToAngleAxis(out float angle, out Vector3 axis);
+        if (angle > 180f)
+            angle -= 360f;
+        Vector3 spin = float.IsInfinity(axis.x) ? Vector3.zero : axis * (angle * Mathf.Deg2Rad * RotationGain);
+        Held.angularVelocity = Vector3.ClampMagnitude(spin, MaxAngularSpeed);
+    }
+
+    // Столкновение с игроком возвращается только когда предмет уже вышел из капсулы,
+    // иначе физика вытолкнет его рывком.
+    void RestoreSeparatedCollisions()
+    {
+        for (int i = pendingCollisionRestore.Count - 1; i >= 0; i--)
+        {
+            Collider part = pendingCollisionRestore[i];
+            if (part == null)
+            {
+                pendingCollisionRestore.RemoveAt(i);
+            }
+            else if (!part.bounds.Intersects(playerCollider.bounds))
+            {
+                Physics.IgnoreCollision(playerCollider, part, false);
+                pendingCollisionRestore.RemoveAt(i);
+            }
+        }
+    }
+}

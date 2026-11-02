@@ -1,0 +1,29 @@
+# Генерируется Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Сборки и архивы
+/[Bb]uild/
+/[Bb]uilds/
+*.zip
+
+# Файлы IDE, Unity создаёт их заново
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.pidb
+*.userprefs
+
+# Системные файлы
+.DS_Store
+Thumbs.db
