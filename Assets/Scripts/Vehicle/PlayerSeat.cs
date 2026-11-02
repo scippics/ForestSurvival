@@ -3,10 +3,11 @@ using UnityEngine;
 // Посадка за руль и передача ввода машине. Пока игрок сидит, его физика выключена.
 public class PlayerSeat : MonoBehaviour
 {
-    static readonly Vector3 SeatPosition = new Vector3(-0.4f, 0.35f, 0.1f);
+    // Точка сиденья — на уровне таза; центр капсулы ниже неё, чтобы глаза оказались на уровне сидящего.
+    static readonly Vector3 SeatedBodyOffset = new Vector3(0f, -0.38f, 0f);
     static readonly float[] ExitSides = { -1f, 1f };
     const float ExitSideDistance = 1.6f;
-    const float ExitHeight = 0.2f;
+    const float ExitGroundClearance = 1f;
 
     public VehicleController Vehicle { get; private set; }
     public bool IsSeated => Vehicle != null;
@@ -68,10 +69,9 @@ public class PlayerSeat : MonoBehaviour
         body.interpolation = RigidbodyInterpolation.None;
         capsule.enabled = false;
 
-        // Взгляд считается относительно родителя, поэтому при посадке он не должен дёрнуться.
-        view.AddYaw(-target.transform.eulerAngles.y);
+        view.EnterSeat();
         transform.SetParent(target.transform, false);
-        transform.SetLocalPositionAndRotation(SeatPosition, Quaternion.identity);
+        transform.SetLocalPositionAndRotation(target.DriverSeat.localPosition + SeatedBodyOffset, Quaternion.identity);
 
         target.Driver = this;
         Vehicle = target;
@@ -89,7 +89,7 @@ public class PlayerSeat : MonoBehaviour
         Vehicle.SetDriverInput(Vector2.zero, false);
         Vehicle.Driver = null;
 
-        view.AddYaw(Vehicle.transform.eulerAngles.y);
+        view.ExitSeat(Vehicle.transform.eulerAngles.y);
         transform.SetParent(null, false);
         transform.SetPositionAndRotation(exit, Quaternion.identity);
 
@@ -110,7 +110,8 @@ public class PlayerSeat : MonoBehaviour
         float half = capsule.height * 0.5f - capsule.radius;
         foreach (float side in ExitSides)
         {
-            exit = vehicle.position + vehicle.right * (side * ExitSideDistance) + Vector3.up * ExitHeight;
+            exit = vehicle.position + vehicle.right * (side * ExitSideDistance);
+            exit.y = OptimizedForestGenerator.TerrainHeight(exit.x, exit.z) + ExitGroundClearance;
             bool blocked = Physics.CheckCapsule(exit + Vector3.up * half, exit - Vector3.up * half, capsule.radius,
                 Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             if (!blocked)

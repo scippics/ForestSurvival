@@ -4,7 +4,7 @@ Shader "Forest/CustomWindFoliage"
 {
     Properties
     {
-        _Color ("Color", Color) = (0.2, 0.32, 0.14, 1)
+        _Color ("Color", Color) = (0.17, 0.19, 0.11, 1)
         _Smoothness ("Smoothness", Range(0, 1)) = 0.1
         _WindStrength ("Wind Strength", Range(0, 0.5)) = 0.05
         _WindSpeed ("Wind Speed", Range(0, 5)) = 1

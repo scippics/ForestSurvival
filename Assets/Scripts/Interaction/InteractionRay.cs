@@ -30,6 +30,18 @@ public static class InteractionRay
         return siphon != null && hit.collider.CompareTag(JerrycanTag) && siphon.IsNearFuelSource();
     }
 
+    // Точка прицела раскрывается только там, где действие сейчас действительно доступно:
+    // с полными руками другой предмет взять нельзя. Триггер PushTrigger луч пропускает,
+    // поэтому зону толкания проверяет InteractionUI, а место водителя — это свободная машина.
+    public static bool IsInteractable(RaycastHit hit, bool handsFull, FuelSiphon heldSiphon)
+    {
+        if (!handsFull && IsPickupable(hit))
+            return true;
+        return hit.collider.CompareTag(FuelSourceTag)
+               || IsFuelTransfer(heldSiphon, hit)
+               || IsFreeVehicle(hit, out _);
+    }
+
     public static bool IsFreeVehicle(RaycastHit hit, out VehicleController vehicle)
     {
         vehicle = null;

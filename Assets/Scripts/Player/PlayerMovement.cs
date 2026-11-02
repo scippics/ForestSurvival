@@ -4,6 +4,7 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     const float WalkSpeed = 4.5f;
+    const float BurdenedSpeedFactor = 0.7f;
     const float GroundAcceleration = 40f;
     const float AirAcceleration = 6f;
     const float MaxSlopeAngle = 50f;
@@ -11,8 +12,26 @@ public class PlayerMovement : MonoBehaviour
 
     public bool IsGrounded { get; private set; }
 
+    // Предмет в руках замедляет шаг. Камера берёт отсюда же вес и настоящую скорость,
+    // поэтому голова качается и при упоре в стену не качается, даже если клавиша зажата.
+    public bool IsBurdened => hands != null && hands.Held != null;
+    public float GroundSpeed
+    {
+        get
+        {
+            if (!enabled || !IsGrounded)
+                return 0f;
+            Vector3 velocity = body.linearVelocity;
+            velocity.y = 0f;
+            return velocity.magnitude;
+        }
+    }
+
+    public static float NormalWalkSpeed => WalkSpeed;
+
     PlayerInputReader input;
     PlayerCamera view;
+    PlayerHands hands;
     Rigidbody body;
     CapsuleCollider capsule;
     Vector3 groundNormal = Vector3.up;
@@ -38,6 +57,12 @@ public class PlayerMovement : MonoBehaviour
         };
     }
 
+    // Руки создаются позже движения, поэтому их нельзя получить в Awake.
+    void Start()
+    {
+        hands = GetComponent<PlayerHands>();
+    }
+
     void FixedUpdate()
     {
         UpdateGround();
@@ -53,7 +78,8 @@ public class PlayerMovement : MonoBehaviour
         Vector3 velocity = body.linearVelocity;
         Vector3 current = IsGrounded ? Vector3.ProjectOnPlane(velocity, groundNormal) : new Vector3(velocity.x, 0f, velocity.z);
         float acceleration = IsGrounded ? GroundAcceleration : AirAcceleration;
-        Vector3 change = Vector3.ClampMagnitude(wish * WalkSpeed - current, acceleration * Time.fixedDeltaTime);
+        float targetSpeed = IsBurdened ? WalkSpeed * BurdenedSpeedFactor : WalkSpeed;
+        Vector3 change = Vector3.ClampMagnitude(wish * targetSpeed - current, acceleration * Time.fixedDeltaTime);
         body.AddForce(change, ForceMode.VelocityChange);
     }
 

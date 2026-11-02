@@ -27,7 +27,6 @@ public class VehicleController : MonoBehaviour
     const float LowGearMaxSlip = 0.9f;
     const float MudResistanceBase = 6500f;
     const float MudResistancePerSpeed = 300f;
-    const float MudMaxSurfaceHeight = 0.2f;
     const float StiffnessEpsilon = 0.01f;
 
     public bool isLowGear;
@@ -35,6 +34,8 @@ public class VehicleController : MonoBehaviour
     public bool LightsOn { get; private set; }
     public float CurrentMudDepth { get; private set; }
     public PlayerSeat Driver { get; set; }
+    public Transform DriverSeat { get; set; }
+    public Transform PassengerSeat { get; set; }
     public float ForwardSpeed => Vector3.Dot(body.linearVelocity, transform.forward);
     public IReadOnlyList<Wheel> Wheels => wheels;
 
@@ -120,7 +121,7 @@ public class VehicleController : MonoBehaviour
         {
             // Только сама земля: рампа или кузов чужой машины над дорогой грязью не считаются.
             float depth = 0f;
-            if (wheel.Collider.GetGroundHit(out WheelHit hit) && hit.point.y < MudMaxSurfaceHeight)
+            if (wheel.Collider.GetGroundHit(out WheelHit hit) && hit.collider.CompareTag(OptimizedForestGenerator.TerrainTag))
                 depth = OptimizedForestGenerator.MudDepth(hit.point.x, hit.point.z);
             total += depth;
 

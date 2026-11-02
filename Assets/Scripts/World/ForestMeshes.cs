@@ -33,21 +33,6 @@ public static class ForestMeshes
         return builder.ToMesh("Grass");
     }
 
-    // Плоский квадрат 1x1 на Y = 0: шейдер ветра его не двигает.
-    public static Mesh BuildGroundQuad()
-    {
-        var mesh = new Mesh { name = "GroundQuad" };
-        mesh.SetVertices(new[]
-        {
-            new Vector3(-0.5f, 0f, -0.5f), new Vector3(0.5f, 0f, -0.5f),
-            new Vector3(-0.5f, 0f, 0.5f), new Vector3(0.5f, 0f, 0.5f)
-        });
-        mesh.SetNormals(new[] { Vector3.up, Vector3.up, Vector3.up, Vector3.up });
-        mesh.SetTriangles(new[] { 0, 2, 1, 1, 2, 3 }, 0);
-        mesh.RecalculateBounds();
-        return mesh;
-    }
-
     class MeshBuilder
     {
         readonly List<Vector3> vertices = new List<Vector3>();

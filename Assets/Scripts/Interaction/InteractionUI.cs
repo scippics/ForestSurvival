@@ -1,6 +1,7 @@
 using UnityEngine;
+using UnityEngine.UI;
 
-// Вешается на камеру: прицел и контекстная подсказка под ним.
+// Вешается на камеру: точка прицела и контекстная подсказка под ней.
 public class InteractionUI : MonoBehaviour
 {
     const string PromptTake = "ЛКМ - Взять";
@@ -13,31 +14,94 @@ public class InteractionUI : MonoBehaviour
     const string PromptHeadlights = ", L - Фары";
 
     const int ReferenceHeight = 1080;
-    const float CrosshairLength = 8f;
-    const float CrosshairThickness = 2f;
     const float PromptOffset = 24f;
     const float PromptSize = 24f;
     const float DrivingPromptSize = 16f;
     const float DrivingPromptMargin = 20f;
 
+    const int DotTextureSize = 64;
+    const float DotIdleSize = 5f;
+    const float DotActiveSize = 22f;
+    const float DotIdleAlpha = 0.55f;
+    const float DotActiveAlpha = 0.3f;
+    const float DotResponse = 16f;
+
     public string CurrentPrompt { get; private set; } = "";
+    public bool IsAimingAtInteractable { get; private set; }
+    public float DotPixelSize => dot.rectTransform.sizeDelta.x;
+    public float DotAlpha => dot.color.a;
+    public bool DotVisible => dot.enabled;
 
     PlayerHands hands;
     PlayerSeat seat;
     GUIStyle promptStyle;
+    Image dot;
+    float dotOpenness;
 
     void Awake()
     {
         hands = GetComponentInParent<PlayerHands>();
         seat = GetComponentInParent<PlayerSeat>();
+        CreateDot();
+    }
+
+    void CreateDot()
+    {
+        var canvasObject = new GameObject("CrosshairCanvas");
+        canvasObject.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+
+        var dotObject = new GameObject("CrosshairDot");
+        dotObject.transform.SetParent(canvasObject.transform, false);
+        dot = dotObject.AddComponent<Image>();
+        dot.sprite = CreateCircleSprite();
+        dot.raycastTarget = false;
+        dot.color = new Color(1f, 1f, 1f, DotIdleAlpha);
+
+        RectTransform rect = dot.rectTransform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+    }
+
+    static Sprite CreateCircleSprite()
+    {
+        var texture = new Texture2D(DotTextureSize, DotTextureSize, TextureFormat.RGBA32, false);
+        float center = (DotTextureSize - 1) * 0.5f;
+        for (int y = 0; y < DotTextureSize; y++)
+        {
+            for (int x = 0; x < DotTextureSize; x++)
+            {
+                float distance = Mathf.Sqrt((x - center) * (x - center) + (y - center) * (y - center));
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(center - distance)));
+            }
+        }
+        texture.Apply();
+        return Sprite.Create(texture, new Rect(0f, 0f, DotTextureSize, DotTextureSize), Vector2.one * 0.5f);
     }
 
     void Update()
     {
-        CurrentPrompt = ResolvePrompt();
+        bool aimed = InteractionRay.Cast(transform, out RaycastHit hit);
+        CurrentPrompt = ResolvePrompt(aimed, hit);
+
+        IsAimingAtInteractable = !seat.IsSeated
+            && (seat.PushZone != null || (aimed && InteractionRay.IsInteractable(hit, hands.Held != null, hands.HeldSiphon)));
+        UpdateDot();
     }
 
-    string ResolvePrompt()
+    void UpdateDot()
+    {
+        // За рулём точка не нужна: центр экрана остаётся свободным для дороги.
+        dot.enabled = !seat.IsSeated;
+
+        dotOpenness = Mathf.MoveTowards(dotOpenness, IsAimingAtInteractable ? 1f : 0f, DotResponse * 0.5f * Time.unscaledDeltaTime);
+        float eased = Mathf.SmoothStep(0f, 1f, dotOpenness);
+
+        float size = Mathf.Lerp(DotIdleSize, DotActiveSize, eased) * Screen.height / ReferenceHeight;
+        dot.rectTransform.sizeDelta = Vector2.one * size;
+        dot.color = new Color(1f, 1f, 1f, Mathf.Lerp(DotIdleAlpha, DotActiveAlpha, eased));
+    }
+
+    string ResolvePrompt(bool aimed, RaycastHit hit)
     {
         if (seat.IsSeated)
             return PromptDriving + (seat.Vehicle.isLowGear ? "вкл" : "выкл") + PromptHeadlights;
@@ -50,7 +114,7 @@ public class InteractionUI : MonoBehaviour
         if (seat.PushZone != null)
             return PromptPush;
 
-        if (InteractionRay.Cast(transform, out RaycastHit hit))
+        if (aimed)
         {
             if (hands.Held == null && InteractionRay.IsPickupable(hit))
                 return PromptTake;
@@ -64,17 +128,11 @@ public class InteractionUI : MonoBehaviour
 
     void OnGUI()
     {
-        if (Event.current.type != EventType.Repaint)
+        if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(CurrentPrompt))
             return;
 
         float scale = Screen.height / (float)ReferenceHeight;
         Vector2 center = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-
-        DrawCrosshair(center, scale, 1f, Color.black);
-        DrawCrosshair(center, scale, 0f, Color.white);
-
-        if (string.IsNullOrEmpty(CurrentPrompt))
-            return;
 
         if (promptStyle == null)
             promptStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
@@ -103,15 +161,5 @@ public class InteractionUI : MonoBehaviour
         GUI.Label(shadow, CurrentPrompt, promptStyle);
         GUI.color = Color.white;
         GUI.Label(area, CurrentPrompt, promptStyle);
-    }
-
-    static void DrawCrosshair(Vector2 center, float scale, float outline, Color color)
-    {
-        float length = (CrosshairLength * scale + outline) * 2f;
-        float thickness = Mathf.Max(1f, CrosshairThickness * scale) + outline * 2f;
-
-        GUI.color = color;
-        GUI.DrawTexture(new Rect(center.x - length * 0.5f, center.y - thickness * 0.5f, length, thickness), Texture2D.whiteTexture);
-        GUI.DrawTexture(new Rect(center.x - thickness * 0.5f, center.y - length * 0.5f, thickness, length), Texture2D.whiteTexture);
     }
 }

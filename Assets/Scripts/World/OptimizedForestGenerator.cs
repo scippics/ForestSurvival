@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-// Бесконечный лес на чанках. Деревья видны в сетке 5x5 вокруг камеры, а трава и коллайдеры
-// существуют только в ближней сетке 3x3. Содержимое чанка зависит лишь от его координат и сида,
-// поэтому при возврате лес тот же, а у игроков в кооперативе он совпадёт без передачи данных.
+// Бесконечный мир на чанках. Рельеф и деревья видны в сетке 5x5 вокруг камеры, а трава и коллайдеры
+// деревьев существуют только в ближней сетке 3x3. Содержимое чанка зависит лишь от его координат и сида,
+// поэтому при возврате мир тот же, а у игроков в кооперативе он совпадёт без передачи данных.
 public class OptimizedForestGenerator : MonoBehaviour
 {
     const float ChunkSize = 50f;
@@ -12,12 +12,26 @@ public class OptimizedForestGenerator : MonoBehaviour
     const int NearRadius = 1;
     const int WorldSeed = 1337;
 
+    const int TerrainCells = 25;
+    const int TerrainVertices = TerrainCells + 1;
+    const float NormalSampleStep = 1f;
+
+    const float HillFrequency = 0.012f;
+    const float HillHeight = 8f;
+    const float BumpFrequency = 0.09f;
+    const float BumpHeight = 2.6f;
+    const float RippleFrequency = 0.27f;
+    const float RippleHeight = 0.6f;
+    const float RoadRoughness = 0.1f;
+    const float StartClearingBlend = 15f;
+
     const int MaxBatchSize = 1023;
     const int GrassGridSide = 110;
     const float GrassClumpFrequency = 0.09f;
     const float GrassNoiseMin = 0.36f;
     const float GrassNoiseMax = 0.6f;
     const float GrassMaxHeight = 1f;
+    const float GrassSink = 0.05f;
 
     const int TreeGridSide = 9;
     const int MaxTreesPerChunk = 60;
@@ -25,6 +39,7 @@ public class OptimizedForestGenerator : MonoBehaviour
     const float TreeNoiseMin = 0.2f;
     const float TreeNoiseMax = 0.5f;
     const float TreeMaxHeight = 19f;
+    const float TreeSink = 0.3f;
     const float TrunkModelRadius = 0.13f;
     const float ShadowCullMargin = 12f;
 
@@ -38,36 +53,40 @@ public class OptimizedForestGenerator : MonoBehaviour
     const float MudDepthMin = 0.4f;
     const float MudNoiseMin = 0.3f;
     const float MudNoiseMax = 0.7f;
-    const float MudSegmentLength = 2.5f;
-    const float MudSegmentOverlap = 0.6f;
-    const float MudHeight = 0.02f;
 
     const float StartClearingRadius = 30f;
-    const float GroundRecenterDistance = 5000f;
+
+    public const string TerrainTag = "Terrain";
 
     static readonly Color TrunkColor = new Color(0.2f, 0.14f, 0.09f);
     static readonly Color CrownColor = new Color(0.1f, 0.2f, 0.11f);
-    static readonly Color GrassColor = new Color(0.2f, 0.3f, 0.11f);
-    static readonly Color MudColor = new Color(0.11f, 0.08f, 0.055f);
-
-    public Transform Ground { get; set; }
+    static readonly Color GrassColor = new Color(0.17f, 0.19f, 0.11f);
 
     public int ActiveChunks => chunks.Count;
     public int ActivePhysicalTrees { get; private set; }
     public int ActiveGrassBlades { get; private set; }
+    public int ActiveTerrainPieces { get; private set; }
     public int LastGrassBatchesTotal { get; private set; }
     public int LastGrassBatchesDrawn { get; private set; }
     public int LastTreeChunksDrawn { get; private set; }
+
+    class TerrainPiece
+    {
+        public GameObject Object;
+        public Mesh Mesh;
+        public MeshCollider Collider;
+    }
 
     class Chunk
     {
         public Vector2Int Coord;
         public Bounds TreeBounds;
         public Bounds GrassBounds;
+        public float[] Heights;
+        public TerrainPiece Terrain;
+        public bool TerrainPending;
         public Matrix4x4[] Trees;
         public int TreeCount;
-        public Matrix4x4[] Mud;
-        public int MudCount;
         public readonly List<CapsuleCollider> Colliders = new List<CapsuleCollider>();
         public readonly List<Matrix4x4[]> GrassBatches = new List<Matrix4x4[]>();
         public int GrassCount;
@@ -77,31 +96,47 @@ public class OptimizedForestGenerator : MonoBehaviour
     readonly Dictionary<Vector2Int, Chunk> chunks = new Dictionary<Vector2Int, Chunk>();
     readonly List<Vector2Int> chunksToRemove = new List<Vector2Int>();
     readonly List<Chunk> pendingGrass = new List<Chunk>();
+    readonly List<Chunk> pendingTerrain = new List<Chunk>();
     readonly Stack<CapsuleCollider> colliderPool = new Stack<CapsuleCollider>();
     readonly Stack<Matrix4x4[]> batchPool = new Stack<Matrix4x4[]>();
+    readonly Stack<TerrainPiece> terrainPool = new Stack<TerrainPiece>();
+    readonly List<Rigidbody> trackedBodies = new List<Rigidbody>();
     readonly Plane[] frustumPlanes = new Plane[6];
 
-    Mesh trunkMesh, crownMesh, grassMesh, mudMesh;
-    Material trunkMaterial, crownMaterial, grassMaterial, mudMaterial;
+    readonly Vector3[] terrainVertices = new Vector3[TerrainVertices * TerrainVertices];
+    readonly Vector3[] terrainNormals = new Vector3[TerrainVertices * TerrainVertices];
+    readonly Color32[] terrainColors = new Color32[TerrainVertices * TerrainVertices];
+    int[] terrainTriangles;
+
+    Mesh trunkMesh, crownMesh, grassMesh;
+    Material trunkMaterial, crownMaterial, grassMaterial, groundMaterial;
     Vector2Int centerChunk;
 
-    void Start()
+    // В Awake: земля должна появиться раньше первого шага физики, иначе машина и предметы провалятся.
+    void Awake()
     {
         trunkMesh = ForestMeshes.BuildTrunk(TrunkModelRadius);
         crownMesh = ForestMeshes.BuildCrown();
         grassMesh = ForestMeshes.BuildGrass();
-        mudMesh = ForestMeshes.BuildGroundQuad();
 
         trunkMaterial = CreateFoliageMaterial(TrunkColor, 0.3f, 0f);
         crownMaterial = CreateFoliageMaterial(CrownColor, 0.3f, 0.04f);
         grassMaterial = CreateFoliageMaterial(GrassColor, 0.08f, 0.03f);
-        mudMaterial = CreateFoliageMaterial(MudColor, 0f, 0f);
-        mudMaterial.SetFloat("_Smoothness", 0.45f);
+        groundMaterial = new Material(Resources.Load<Shader>("ForestGround"));
+        terrainTriangles = BuildTerrainTriangles();
+
+        foreach (Rigidbody body in FindObjectsByType<Rigidbody>(FindObjectsSortMode.None))
+        {
+            if (body.GetComponent<PlayerMovement>() == null)
+                trackedBodies.Add(body);
+        }
 
         centerChunk = WorldToChunk(Camera.main.transform.position);
         RefreshChunks();
 
-        // На старте лес должен быть готов сразу; потом трава догружается по одному чанку за кадр.
+        // На старте мир должен быть готов сразу; потом он догружается по одному чанку за кадр.
+        while (pendingTerrain.Count > 0)
+            GenerateNextTerrain();
         while (pendingGrass.Count > 0)
             GenerateNextGrass();
     }
@@ -120,16 +155,16 @@ public class OptimizedForestGenerator : MonoBehaviour
         if (view == null)
             return;
 
-        Vector3 position = view.transform.position;
-        Vector2Int center = WorldToChunk(position);
+        Vector2Int center = WorldToChunk(view.transform.position);
         if (center != centerChunk)
         {
             centerChunk = center;
             RefreshChunks();
         }
 
+        GenerateNextTerrain();
         GenerateNextGrass();
-        RecenterGround(position);
+        UpdateTrackedBodies();
         Draw(view);
     }
 
@@ -179,6 +214,26 @@ public class OptimizedForestGenerator : MonoBehaviour
         return Mathf.Lerp(MudDepthMin, 1f, Mathf.InverseLerp(MudNoiseMin, MudNoiseMax, noise));
     }
 
+    // Холмы одинаковы везде, чтобы дорога плавно шла по склонам, а кочки на ней сглажены.
+    // Стартовая поляна остаётся ровной: на ней стоит тестовый полигон.
+    public static float TerrainHeight(float x, float z)
+    {
+        float clearing = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(StartClearingRadius, StartClearingRadius + StartClearingBlend, Mathf.Sqrt(x * x + z * z)));
+        if (clearing <= 0f)
+            return 0f;
+
+        float hills = (Mathf.PerlinNoise(x * HillFrequency + NoiseOffset, z * HillFrequency + NoiseOffset) - 0.5f) * HillHeight;
+        float bumps = (Mathf.PerlinNoise(x * BumpFrequency + NoiseOffset * 3f, z * BumpFrequency + NoiseOffset) - 0.5f) * BumpHeight
+                      + (Mathf.PerlinNoise(x * RippleFrequency + NoiseOffset, z * RippleFrequency + NoiseOffset * 3f) - 0.5f) * RippleHeight;
+
+        // Переход шириной в половину дороги: на границе столбцов чанков рельеф всегда лесной и стыки не рвутся.
+        int column = Mathf.RoundToInt(x / ChunkSize);
+        float roadDistance = Mathf.Abs(x - RoadCenterX(column, z));
+        float roughness = Mathf.Lerp(RoadRoughness, 1f, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(RoadHalfWidth, RoadHalfWidth * 2f, roadDistance)));
+
+        return clearing * (hills + bumps * roughness);
+    }
+
     void RefreshChunks()
     {
         chunksToRemove.Clear();
@@ -192,6 +247,7 @@ public class OptimizedForestGenerator : MonoBehaviour
         {
             Chunk chunk = chunks[coord];
             ReleaseNearContent(chunk);
+            ReleaseTerrain(chunk);
             chunks.Remove(coord);
         }
 
@@ -208,9 +264,47 @@ public class OptimizedForestGenerator : MonoBehaviour
         foreach (Chunk chunk in chunks.Values)
         {
             if (ChunkDistance(chunk.Coord, centerChunk) <= NearRadius)
+            {
+                // Землю под ногами откладывать нельзя: игрок провалится ещё до следующего кадра.
+                if (chunk.Terrain == null)
+                {
+                    if (chunk.TerrainPending)
+                    {
+                        chunk.TerrainPending = false;
+                        pendingTerrain.Remove(chunk);
+                    }
+                    BuildTerrain(chunk);
+                }
                 AcquireNearContent(chunk);
+            }
             else
+            {
                 ReleaseNearContent(chunk);
+                if (chunk.Terrain == null && !chunk.TerrainPending)
+                {
+                    chunk.TerrainPending = true;
+                    pendingTerrain.Add(chunk);
+                }
+            }
+        }
+    }
+
+    // Коллайдеры земли есть только рядом с игроком, поэтому всё, что осталось дальше,
+    // замораживается на месте и оживает, когда земля под ним появится снова.
+    void UpdateTrackedBodies()
+    {
+        for (int i = trackedBodies.Count - 1; i >= 0; i--)
+        {
+            Rigidbody body = trackedBodies[i];
+            if (body == null)
+            {
+                trackedBodies.RemoveAt(i);
+                continue;
+            }
+
+            bool frozen = ChunkDistance(WorldToChunk(body.position), centerChunk) > NearRadius;
+            if (body.isKinematic != frozen)
+                body.isKinematic = frozen;
         }
     }
 
@@ -221,43 +315,166 @@ public class OptimizedForestGenerator : MonoBehaviour
 
     Chunk CreateChunk(Vector2Int coord)
     {
+        var chunk = new Chunk { Coord = coord, Trees = new Matrix4x4[MaxTreesPerChunk] };
+        GenerateHeights(chunk, out float minHeight, out float maxHeight);
+
+        // Запас у деревьев: дерево за границей кадра всё ещё отбрасывает тень в кадр.
         Vector3 center = new Vector3(coord.x * ChunkSize, 0f, coord.y * ChunkSize);
-        var chunk = new Chunk
-        {
-            Coord = coord,
-            Trees = new Matrix4x4[MaxTreesPerChunk],
-            // Запас у деревьев: дерево за границей кадра всё ещё отбрасывает тень в кадр.
-            TreeBounds = new Bounds(center + Vector3.up * TreeMaxHeight * 0.5f,
-                new Vector3(ChunkSize + ShadowCullMargin * 2f, TreeMaxHeight + 2f, ChunkSize + ShadowCullMargin * 2f)),
-            GrassBounds = new Bounds(center + Vector3.up * GrassMaxHeight * 0.5f,
-                new Vector3(ChunkSize, GrassMaxHeight, ChunkSize))
-        };
+        float treeTop = maxHeight + TreeMaxHeight + 2f;
+        chunk.TreeBounds = new Bounds(center + Vector3.up * (minHeight + treeTop) * 0.5f,
+            new Vector3(ChunkSize + ShadowCullMargin * 2f, treeTop - minHeight, ChunkSize + ShadowCullMargin * 2f));
+        float grassTop = maxHeight + GrassMaxHeight;
+        chunk.GrassBounds = new Bounds(center + Vector3.up * (minHeight + grassTop) * 0.5f,
+            new Vector3(ChunkSize, grassTop - minHeight, ChunkSize));
+
         GenerateTrees(chunk);
-        GenerateMud(chunk);
         return chunk;
     }
 
-    static void GenerateMud(Chunk chunk)
+    static void GenerateHeights(Chunk chunk, out float minHeight, out float maxHeight)
     {
-        int segments = Mathf.CeilToInt(ChunkSize / MudSegmentLength);
-        chunk.Mud = new Matrix4x4[segments];
+        chunk.Heights = new float[TerrainVertices * TerrainVertices];
+        float cell = ChunkSize / TerrainCells;
+        float minX = (chunk.Coord.x - 0.5f) * ChunkSize;
+        float minZ = (chunk.Coord.y - 0.5f) * ChunkSize;
+        minHeight = float.MaxValue;
+        maxHeight = float.MinValue;
+
+        for (int iz = 0; iz < TerrainVertices; iz++)
+        {
+            for (int ix = 0; ix < TerrainVertices; ix++)
+            {
+                float height = TerrainHeight(minX + ix * cell, minZ + iz * cell);
+                chunk.Heights[iz * TerrainVertices + ix] = height;
+                minHeight = Mathf.Min(minHeight, height);
+                maxHeight = Mathf.Max(maxHeight, height);
+            }
+        }
+    }
+
+    // Высота по сетке чанка, а не по шуму: растения стоят на той же поверхности, что нарисована.
+    static float SampleHeight(Chunk chunk, float x, float z)
+    {
+        float cell = ChunkSize / TerrainCells;
+        float fx = Mathf.Clamp((x - (chunk.Coord.x - 0.5f) * ChunkSize) / cell, 0f, TerrainCells - 0.001f);
+        float fz = Mathf.Clamp((z - (chunk.Coord.y - 0.5f) * ChunkSize) / cell, 0f, TerrainCells - 0.001f);
+        int ix = (int)fx;
+        int iz = (int)fz;
+        float tx = fx - ix;
+        float tz = fz - iz;
+        float[] heights = chunk.Heights;
+        int row = iz * TerrainVertices + ix;
+        float near = Mathf.Lerp(heights[row], heights[row + 1], tx);
+        float far = Mathf.Lerp(heights[row + TerrainVertices], heights[row + TerrainVertices + 1], tx);
+        return Mathf.Lerp(near, far, tz);
+    }
+
+    static int[] BuildTerrainTriangles()
+    {
+        var triangles = new int[TerrainCells * TerrainCells * 6];
+        int index = 0;
+        for (int iz = 0; iz < TerrainCells; iz++)
+        {
+            for (int ix = 0; ix < TerrainCells; ix++)
+            {
+                int corner = iz * TerrainVertices + ix;
+                triangles[index++] = corner;
+                triangles[index++] = corner + TerrainVertices;
+                triangles[index++] = corner + 1;
+                triangles[index++] = corner + 1;
+                triangles[index++] = corner + TerrainVertices;
+                triangles[index++] = corner + TerrainVertices + 1;
+            }
+        }
+        return triangles;
+    }
+
+    void GenerateNextTerrain()
+    {
+        if (pendingTerrain.Count == 0)
+            return;
+
+        Chunk chunk = pendingTerrain[pendingTerrain.Count - 1];
+        pendingTerrain.RemoveAt(pendingTerrain.Count - 1);
+        chunk.TerrainPending = false;
+        BuildTerrain(chunk);
+    }
+
+    void BuildTerrain(Chunk chunk)
+    {
+        TerrainPiece piece = terrainPool.Count > 0 ? terrainPool.Pop() : CreateTerrainPiece();
+        piece.Object.transform.position = new Vector3(chunk.Coord.x * ChunkSize, 0f, chunk.Coord.y * ChunkSize);
+
+        float cell = ChunkSize / TerrainCells;
+        float halfSize = ChunkSize * 0.5f;
+        float minX = (chunk.Coord.x - 0.5f) * ChunkSize;
         float minZ = (chunk.Coord.y - 0.5f) * ChunkSize;
 
-        for (int i = 0; i < segments; i++)
+        for (int iz = 0; iz < TerrainVertices; iz++)
         {
-            float z = minZ + (i + 0.5f) * MudSegmentLength;
-            float x = RoadCenterX(chunk.Coord.x, z);
-            if (IsInStartClearing(x, z))
-                continue;
+            for (int ix = 0; ix < TerrainVertices; ix++)
+            {
+                int index = iz * TerrainVertices + ix;
+                float x = minX + ix * cell;
+                float z = minZ + iz * cell;
 
-            // Ширина по X совпадает с физической зоной грязи и на наклонных участках.
-            float slope = (RoadCenterX(chunk.Coord.x, z + 0.5f) - RoadCenterX(chunk.Coord.x, z - 0.5f));
-            float angle = Mathf.Atan(slope);
-            float width = RoadHalfWidth * 2f * Mathf.Cos(angle);
-            float length = MudSegmentLength / Mathf.Cos(angle) + MudSegmentOverlap;
-            chunk.Mud[chunk.MudCount++] = Matrix4x4.TRS(new Vector3(x, MudHeight, z),
-                Quaternion.Euler(0f, angle * Mathf.Rad2Deg, 0f), new Vector3(width, 1f, length));
+                terrainVertices[index] = new Vector3(ix * cell - halfSize, chunk.Heights[index], iz * cell - halfSize);
+
+                // Нормаль от самой функции высоты, а не от сетки: так на стыках чанков нет швов света.
+                float slopeX = TerrainHeight(x + NormalSampleStep, z) - TerrainHeight(x - NormalSampleStep, z);
+                float slopeZ = TerrainHeight(x, z + NormalSampleStep) - TerrainHeight(x, z - NormalSampleStep);
+                terrainNormals[index] = new Vector3(-slopeX, NormalSampleStep * 2f, -slopeZ).normalized;
+
+                terrainColors[index] = new Color32((byte)(MudDepth(x, z) * 255f), 0, 0, 255);
+            }
         }
+
+        Mesh mesh = piece.Mesh;
+        mesh.vertices = terrainVertices;
+        mesh.normals = terrainNormals;
+        mesh.colors32 = terrainColors;
+        if (mesh.GetIndexCount(0) == 0)
+            mesh.triangles = terrainTriangles;
+        mesh.RecalculateBounds();
+
+        // Повторное присваивание заново строит физическую форму из новых вершин.
+        // Объект к этому моменту включён: у выключенного физика не перестраивается.
+        piece.Object.SetActive(true);
+        piece.Collider.sharedMesh = null;
+        piece.Collider.sharedMesh = mesh;
+
+        chunk.Terrain = piece;
+        ActiveTerrainPieces++;
+    }
+
+    TerrainPiece CreateTerrainPiece()
+    {
+        var terrainObject = new GameObject("TerrainChunk") { tag = TerrainTag };
+        terrainObject.transform.SetParent(transform, false);
+        terrainObject.AddComponent<MeshFilter>();
+        terrainObject.AddComponent<MeshRenderer>().sharedMaterial = groundMaterial;
+
+        var mesh = new Mesh { name = "Terrain" };
+        terrainObject.GetComponent<MeshFilter>().sharedMesh = mesh;
+
+        return new TerrainPiece { Object = terrainObject, Mesh = mesh, Collider = terrainObject.AddComponent<MeshCollider>() };
+    }
+
+    void ReleaseTerrain(Chunk chunk)
+    {
+        if (chunk.TerrainPending)
+        {
+            chunk.TerrainPending = false;
+            pendingTerrain.Remove(chunk);
+        }
+
+        if (chunk.Terrain == null)
+            return;
+
+        chunk.Terrain.Object.SetActive(false);
+        terrainPool.Push(chunk.Terrain);
+        chunk.Terrain = null;
+        ActiveTerrainPieces--;
     }
 
     void GenerateTrees(Chunk chunk)
@@ -284,7 +501,8 @@ public class OptimizedForestGenerator : MonoBehaviour
                 if (IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)))
                     continue;
 
-                chunk.Trees[chunk.TreeCount++] = Matrix4x4.TRS(new Vector3(x, 0f, z),
+                // Ствол немного утоплен: на склоне его основание не должно висеть над землёй.
+                chunk.Trees[chunk.TreeCount++] = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - TreeSink, z),
                     Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width));
             }
         }
@@ -399,7 +617,7 @@ public class OptimizedForestGenerator : MonoBehaviour
                 float height = Mathf.Lerp(0.35f, 0.85f, clump) * Mathf.Lerp(0.8f, 1.2f, (float)random.NextDouble());
                 float width = Mathf.Lerp(0.45f, 0.8f, (float)random.NextDouble());
                 float yaw = (float)random.NextDouble() * 360f;
-                AddGrassBlade(chunk, Matrix4x4.TRS(new Vector3(x, 0f, z), Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width)));
+                AddGrassBlade(chunk, Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - GrassSink, z), Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width)));
             }
         }
         ActiveGrassBlades += chunk.GrassCount;
@@ -413,18 +631,6 @@ public class OptimizedForestGenerator : MonoBehaviour
 
         chunk.GrassBatches[chunk.GrassBatches.Count - 1][slot] = blade;
         chunk.GrassCount++;
-    }
-
-    void RecenterGround(Vector3 position)
-    {
-        if (Ground == null)
-            return;
-
-        // Двигать землю за игроком нельзя: оставленная машина и предметы провалились бы.
-        Vector3 offset = position - Ground.position;
-        offset.y = 0f;
-        if (offset.sqrMagnitude > GroundRecenterDistance * GroundRecenterDistance)
-            Ground.position = new Vector3(position.x, Ground.position.y, position.z);
     }
 
     void Draw(Camera view)
@@ -446,11 +652,8 @@ public class OptimizedForestGenerator : MonoBehaviour
 
             int batches = chunk.GrassBatches.Count;
             grassTotal += batches;
-            if (!GeometryUtility.TestPlanesAABB(frustumPlanes, chunk.GrassBounds))
+            if (batches == 0 || !GeometryUtility.TestPlanesAABB(frustumPlanes, chunk.GrassBounds))
                 continue;
-
-            if (chunk.MudCount > 0)
-                Graphics.DrawMeshInstanced(mudMesh, 0, mudMaterial, chunk.Mud, chunk.MudCount, null, ShadowCastingMode.Off, true);
 
             for (int i = 0; i < batches; i++)
             {
