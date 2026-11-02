@@ -14,7 +14,9 @@ Shader "Forest/Ground"
         Tags { "RenderType" = "Opaque" }
 
         CGPROGRAM
-        #pragma surface surf Standard fullforwardshadows
+        // addshadow обязателен: тени считаются по карте глубины из этого прохода. Без него
+        // земли в карте нет, и на ней проступают тени всего, что скрыто за холмом и под землёй.
+        #pragma surface surf Standard fullforwardshadows addshadow
         #pragma target 3.0
 
         struct Input
