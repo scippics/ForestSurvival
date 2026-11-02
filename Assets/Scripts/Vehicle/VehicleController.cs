@@ -6,12 +6,11 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody))]
 public class VehicleController : MonoBehaviour
 {
-    const float MotorTorque = 600f;
+    const float MotorTorque = 900f;
     const float MaxSpeed = 22f;
-    const float LowGearTorque = 1800f;
-    const float LowGearMaxSpeed = 6f;
     const float ReverseSpeedFactor = 0.5f;
     const float BrakeTorque = 3000f;
+    const float HandbrakeTorque = 100000f;
     const float EngineBrakeTorque = 800f;
     const float RollingResistance = 25f;
     const float MaxSteerAngle = 32f;
@@ -19,29 +18,22 @@ public class VehicleController : MonoBehaviour
     const float OpposingSpeedThreshold = 0.5f;
     const float WakeTorque = 0.001f;
 
-    // Сцепление в грязи зависит от передачи: иначе лишний момент пониженной упирался бы в тот же
-    // предел трения и она ничего не давала. На обычной колёса срываются в пробуксовку.
-    const float MudForwardStiffness = 0.3f;
-    const float MudForwardStiffnessLowGear = 0.7f;
+    // Грязь отнимает скорость, но не обездвиживает: тяга на всех колёсах всегда больше сопротивления
+    // самой глубокой ямы, с запасом на подъём.
+    const float MudForwardStiffness = 0.6f;
     const float MudSidewaysStiffness = 0.5f;
-    const float LowGearMaxSlip = 1.5f;
     const float GripMargin = 0.9f;
-    const float OverspinBrakeTorque = 600f;
     const float AntiRollStiffness = 9000f;
     const float OverturnedUpDot = 0.5f;
     const float RecoverHeight = 1.5f;
-    const float BoggedDepth = 0.5f;
-    const float BoggedSpeed = 1f;
-    const float MudResistanceBase = 6500f;
-    const float MudResistancePerSpeed = 300f;
+    const float MudResistanceBase = 4000f;
+    const float MudResistancePerSpeed = 200f;
     const float StiffnessEpsilon = 0.01f;
 
-    public bool isLowGear;
-
     public bool LightsOn { get; private set; }
+    public bool HandbrakeOn { get; set; }
     public float CurrentMudDepth { get; private set; }
     public bool IsOverturned => Vector3.Dot(transform.up, Vector3.up) < OverturnedUpDot;
-    public bool IsBogged => !isLowGear && throttle != 0f && CurrentMudDepth > BoggedDepth && Mathf.Abs(ForwardSpeed) < BoggedSpeed;
     public PlayerSeat Driver { get; set; }
     public Transform DriverSeat { get; set; }
     public Transform PassengerSeat { get; set; }
@@ -61,13 +53,14 @@ public class VehicleController : MonoBehaviour
         public Color Emission;
     }
 
+    static readonly int WorldToLocalId = Shader.PropertyToID("_ForestVehicleWorldToLocal");
+
     readonly List<Wheel> wheels = new List<Wheel>();
     readonly List<Light> lights = new List<Light>();
     readonly List<Lamp> lamps = new List<Lamp>();
     Rigidbody body;
     float throttle;
     float steer;
-    bool brakeHeld;
     float currentSteer;
     bool releasedForPush;
 
@@ -116,11 +109,10 @@ public class VehicleController : MonoBehaviour
         releasedForPush = true;
     }
 
-    public void SetDriverInput(Vector2 move, bool brake)
+    public void SetDriverInput(Vector2 move)
     {
         throttle = move.y;
         steer = move.x;
-        brakeHeld = brake;
     }
 
     void ApplyMud()
@@ -134,8 +126,7 @@ public class VehicleController : MonoBehaviour
                 depth = OptimizedForestGenerator.MudDepth(hit.point.x, hit.point.z);
             total += depth;
 
-            float mudForward = isLowGear ? MudForwardStiffnessLowGear : MudForwardStiffness;
-            SetStiffness(wheel.Collider, Mathf.Lerp(1f, mudForward, depth), Mathf.Lerp(1f, MudSidewaysStiffness, depth));
+            SetStiffness(wheel.Collider, Mathf.Lerp(1f, MudForwardStiffness, depth), Mathf.Lerp(1f, MudSidewaysStiffness, depth));
         }
 
         CurrentMudDepth = wheels.Count > 0 ? total / wheels.Count : 0f;
@@ -154,7 +145,7 @@ public class VehicleController : MonoBehaviour
         body.AddForce(-velocity / speed * resistance, ForceMode.Force);
     }
 
-    // Сорванное колесо теряет сцепление, поэтому пониженная отдаёт не больше момента, чем колесо
+    // Сорванное колесо теряет сцепление, поэтому на него идёт не больше момента, чем оно
     // может передать на землю: так он весь уходит в тягу, а не в раскрутку.
     static float LimitToGrip(WheelCollider wheel, float motor)
     {
@@ -228,24 +219,25 @@ public class VehicleController : MonoBehaviour
 
         float speed = ForwardSpeed;
         float absSpeed = Mathf.Abs(speed);
-        float limit = isLowGear ? LowGearMaxSpeed : MaxSpeed;
+        float limit = MaxSpeed;
         if (throttle < 0f)
             limit *= ReverseSpeedFactor;
 
         // Газ против движения сначала тормозит машину и только потом включает обратный ход.
         bool opposing = throttle * speed < 0f && absSpeed > OpposingSpeedThreshold;
-        float peakTorque = isLowGear ? LowGearTorque : MotorTorque;
-        float motor = opposing ? 0f : throttle * peakTorque * Mathf.Clamp01(1f - absSpeed / limit);
+        float motor = opposing || HandbrakeOn ? 0f : throttle * MotorTorque * Mathf.Clamp01(1f - absSpeed / limit);
 
         float brake = RollingResistance;
-        if (brakeHeld || opposing)
+        if (HandbrakeOn)
+            brake = HandbrakeTorque;
+        else if (opposing)
             brake = BrakeTorque;
         else if (absSpeed > limit)
             brake = EngineBrakeTorque;
         else if (throttle != 0f)
             brake = 0f;
 
-        if (releasedForPush && throttle == 0f && !brakeHeld)
+        if (releasedForPush && throttle == 0f && !HandbrakeOn)
         {
             motor = WakeTorque;
             brake = 0f;
@@ -257,23 +249,8 @@ public class VehicleController : MonoBehaviour
         foreach (Wheel wheel in wheels)
         {
             float wheelSpeed = Mathf.Abs(wheel.Collider.rpm) * Mathf.PI * 2f * wheel.Collider.radius / 60f;
-            float wheelMotor = wheelSpeed > limit ? 0f : motor;
-            float wheelBrake = brake;
-            if (isLowGear)
-            {
-                wheelMotor = LimitToGrip(wheel.Collider, wheelMotor);
-
-                // Колесо, раскрученное ещё на обычной передаче, само не остановится:
-                // пока оно буксует, тяги нет, поэтому пониженная сначала его притормаживает.
-                if (wheelSpeed - absSpeed > LowGearMaxSlip)
-                {
-                    wheelMotor = 0f;
-                    wheelBrake = Mathf.Max(wheelBrake, OverspinBrakeTorque);
-                }
-            }
-
-            wheel.Collider.motorTorque = wheelMotor;
-            wheel.Collider.brakeTorque = wheelBrake;
+            wheel.Collider.motorTorque = wheelSpeed > limit ? 0f : LimitToGrip(wheel.Collider, motor);
+            wheel.Collider.brakeTorque = brake;
             if (wheel.IsFront)
                 wheel.Collider.steerAngle = currentSteer;
         }
@@ -281,6 +258,9 @@ public class VehicleController : MonoBehaviour
 
     void LateUpdate()
     {
+        // Грязь и пыль на кузове считаются от машины, иначе плыли бы по нему на ходу.
+        Shader.SetGlobalMatrix(WorldToLocalId, transform.worldToLocalMatrix);
+
         foreach (Wheel wheel in wheels)
         {
             wheel.Collider.GetWorldPose(out Vector3 position, out Quaternion rotation);

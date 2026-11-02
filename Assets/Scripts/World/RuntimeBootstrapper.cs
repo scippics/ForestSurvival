@@ -8,26 +8,29 @@ public static class RuntimeBootstrapper
     const float WheelTrack = 0.95f;
     const float WheelBase = 1.4f;
     const float WheelHeight = -0.35f;
-    const float FogDensity = 0.05f;
+    const float FogDensity = 0.042f;
     const float VisibleDistance = 45f;
     const float CameraFarClip = 90f;
+    const float HeadlightBeamLength = 22f;
+    const float HeadlightBeamStrength = 0.1f;
 
     static readonly Color ConcreteColor = new Color(0.45f, 0.45f, 0.43f);
-    static readonly Color WoodColor = new Color(0.5f, 0.35f, 0.2f);
-    static readonly Color HoseColor = new Color(0.1f, 0.1f, 0.1f);
-    static readonly Color JerrycanColor = new Color(0.6f, 0.12f, 0.1f);
-    static readonly Color PaperColor = new Color(0.8f, 0.78f, 0.65f);
-    static readonly Color FuelSourceColor = new Color(0.55f, 0.45f, 0.1f);
-    static readonly Color CarColor =new Color(0.25f, 0.32f, 0.38f);
-    static readonly Color WheelColor = new Color(0.08f, 0.08f, 0.08f);
-    static readonly Color InteriorDark = new Color(0.07f, 0.07f, 0.08f);
+    static readonly Color CarColor = new Color(0.2f, 0.26f, 0.21f);
+    static readonly Color CarDarkColor = new Color(0.04f, 0.04f, 0.042f);
+    static readonly Color MetalColor = new Color(0.32f, 0.32f, 0.33f);
+    static readonly Color RimColor = new Color(0.13f, 0.13f, 0.12f);
+    static readonly Color WheelColor = new Color(0.05f, 0.05f, 0.05f);
+    static readonly Color DashGlowOff = new Color(0.02f, 0.03f, 0.02f);
+    static readonly Color DashGlow = new Color(0.25f, 0.9f, 0.5f);
+    static readonly Color InteriorDark = new Color(0.14f, 0.14f, 0.15f);
     static readonly Color InteriorBlack = new Color(0.02f, 0.02f, 0.02f);
     static readonly Color HeadlightColor = new Color(1f, 0.8f, 0.5f);
     static readonly Color LampOff = new Color(0.55f, 0.55f, 0.5f);
     static readonly Color TailOff = new Color(0.3f, 0.04f, 0.03f);
     static readonly Color TailEmission = new Color(1f, 0.08f, 0.05f);
 
-    static Shader litShader;
+    static Mesh tyreMesh;
+    static Material glassMaterial;
 
     // Общий материал растительности: один на весь лес, чтобы деревья рисовались инстансингом.
     public static Material FoliageMaterial { get; private set; }
@@ -35,6 +38,7 @@ public static class RuntimeBootstrapper
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Build()
     {
+        ForestNoise.Install();
         BuildEnvironment();
         BuildTestGround();
         BuildItems();
@@ -43,22 +47,32 @@ public static class RuntimeBootstrapper
 
         // Последним: рельеф создаётся сразу и запоминает всё, что нужно удерживать на земле.
         new GameObject("Forest").AddComponent<OptimizedForestGenerator>();
+        new GameObject("Atmosphere").AddComponent<ForestAtmosphere>();
         new GameObject("MainMenu").AddComponent<MainMenu>();
     }
 
     static void BuildEnvironment()
     {
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+        RenderSettings.skybox = new Material(Resources.Load<Shader>("ForestSky"));
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.ExponentialSquared;
         RenderSettings.fogDensity = FogDensity;
 
         // Дальше тумана ничего не видно: не тратим на это ни разрешение теней, ни отрисовку.
         QualitySettings.shadowDistance = VisibleDistance;
+        QualitySettings.shadows = ShadowQuality.All;
+        QualitySettings.shadowResolution = ShadowResolution.VeryHigh;
+        QualitySettings.shadowCascades = 4;
+        QualitySettings.pixelLightCount = 6;
+        QualitySettings.antiAliasing = 4;
+        QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
 
         var sun = new GameObject("Sun").AddComponent<Light>();
         sun.type = LightType.Directional;
         sun.shadows = LightShadows.Soft;
+        sun.shadowBias = 0.03f;
+        sun.shadowNormalBias = 0.35f;
         sun.gameObject.AddComponent<DayNightCycle>();
 
         FoliageMaterial = new Material(Resources.Load<Shader>("CustomWindFoliage")) { enableInstancing = true };
@@ -66,41 +80,21 @@ public static class RuntimeBootstrapper
 
     static void BuildTestGround()
     {
-        CreatePrimitive("Wall_Test", PrimitiveType.Cube, new Vector3(0f, 1.5f, 6f), new Vector3(8f, 3f, 0.5f), ConcreteColor);
-
-        GameObject ramp = CreatePrimitive("Ramp_Test", PrimitiveType.Cube, new Vector3(-6f, 0.8f, 0f), new Vector3(3f, 0.3f, 6f), ConcreteColor);
-        ramp.transform.rotation = Quaternion.Euler(-20f, 0f, 0f);
+        Material concrete = ProceduralModels.Lit(ConcreteColor, 0f, 0.35f);
+        ProceduralModels.Part(null, "Wall_Test", PrimitiveType.Cube, new Vector3(0f, 1.5f, 6f), new Vector3(8f, 3f, 0.5f), concrete, null, true);
+        ProceduralModels.Part(null, "Ramp_Test", PrimitiveType.Cube, new Vector3(-6f, 0.8f, 0f), new Vector3(3f, 0.3f, 6f), concrete, Quaternion.Euler(-20f, 0f, 0f), true);
     }
 
     static void BuildItems()
     {
         for (int i = 0; i < 3; i++)
-            CreateItem("Item_Cube_" + (i + 1), PrimitiveType.Cube, new Vector3(-1.5f + i, 0.25f, 2f), Vector3.one * 0.5f, 30f, WoodColor);
+            ProceduralModels.CreateCrate("Item_Cube_" + (i + 1), new Vector3(-1.5f + i, 0.25f, 2f));
 
-        GameObject hose = CreateItem("Item_Hose", PrimitiveType.Cylinder, new Vector3(-0.6f, 0.5f, -1.2f), new Vector3(0.08f, 0.45f, 0.08f), 2f, HoseColor);
-        hose.AddComponent<FuelSiphon>();
-
-        GameObject blueprint = CreateItem("Item_Blueprint", PrimitiveType.Cube, new Vector3(1f, 0.02f, -2f), new Vector3(0.3f, 0.02f, 0.4f), 0.1f, PaperColor);
-        blueprint.AddComponent<BlueprintItem>().recipeID = "fuel_filter";
-
-        CreateJerrycan(new Vector3(-1.2f, 0.225f, -1.5f));
-
-        GameObject source = CreatePrimitive("FuelSource", PrimitiveType.Cube, new Vector3(-3f, 1f, -1f), Vector3.one * 2f, FuelSourceColor);
-        source.tag = InteractionRay.FuelSourceTag;
-    }
-
-    // Два тега на один объект Unity не позволяет: Pickupable на корне, Jerrycan на коллайдере.
-    static void CreateJerrycan(Vector3 position)
-    {
-        var root = new GameObject("Item_Jerrycan");
-        root.tag = InteractionRay.PickupableTag;
-        root.transform.position = position;
-
-        GameObject shell = CreatePrimitive("Shell", PrimitiveType.Cube, position, new Vector3(0.3f, 0.45f, 0.18f), JerrycanColor);
-        shell.tag = InteractionRay.JerrycanTag;
-        shell.transform.SetParent(root.transform, true);
-
-        root.AddComponent<Rigidbody>().mass = 18f;
+        ProceduralModels.CreateHose("Item_Hose", new Vector3(-0.6f, 0.5f, -1.2f)).AddComponent<FuelSiphon>();
+        ProceduralModels.CreateBlueprint("Item_Blueprint", new Vector3(1f, 0.02f, -2f)).AddComponent<BlueprintItem>().recipeID = "fuel_filter";
+        ProceduralModels.CreateJerrycan("Item_Jerrycan", new Vector3(-1.2f, 0.225f, -1.5f), Quaternion.identity);
+        ProceduralModels.CreateBattery("Item_Battery", new Vector3(0.4f, 0.12f, -1.5f), Quaternion.identity);
+        ProceduralModels.CreateFuelSource("FuelSource", new Vector3(-3f, 1f, -1f));
     }
 
     static void BuildVehicle(Vector3 position)
@@ -135,15 +129,19 @@ public static class RuntimeBootstrapper
         zone.size = new Vector3(2f, 2.4f, 1.6f);
 
         vehicle.AddComponent<PushableVehicle>();
+        vehicle.AddComponent<WheelMudSpray>();
     }
 
-    // Кузов — дочерние объекты: масштаб на корне исказил бы WheelCollider. Кабина собрана из крыши
-    // и стоек, чтобы из салона было видно окна; физически это два сплошных ящика.
+    // Кузов — дочерние объекты: масштаб на корне исказил бы WheelCollider. Физически машина — два
+    // сплошных ящика; всё видимое (капот, кабина, багажник) — отдельные детали без коллайдеров,
+    // чтобы форма и масса не зависели от оформления.
     static void BuildVehicleBody(Transform vehicle)
     {
-        GameObject hull = CreatePrimitive("Hull", PrimitiveType.Cube, Vector3.zero, new Vector3(1.8f, 0.6f, 4f), CarColor);
+        var hull = new GameObject("HullCollider");
         hull.transform.SetParent(vehicle, false);
-        hull.transform.localPosition = new Vector3(0f, -0.2f, 0f);
+        var hullCollider = hull.AddComponent<BoxCollider>();
+        hullCollider.center = new Vector3(0f, -0.2f, 0f);
+        hullCollider.size = new Vector3(1.8f, 0.6f, 4f);
 
         var cabin = new GameObject("CabinCollider");
         cabin.transform.SetParent(vehicle, false);
@@ -151,12 +149,77 @@ public static class RuntimeBootstrapper
         cabinCollider.center = new Vector3(0f, 0.5f, -0.1f);
         cabinCollider.size = new Vector3(1.8f, 0.8f, 2.2f);
 
-        AddVisual(vehicle, "Roof", PrimitiveType.Cube, new Vector3(0f, 0.88f, -0.1f), new Vector3(1.8f, 0.06f, 2.2f), Quaternion.identity, CarColor);
+        // Ходовая и нижняя часть кабины.
+        AddVisual(vehicle, "Chassis", PrimitiveType.Cube, new Vector3(0f, -0.4f, 0f), new Vector3(1.5f, 0.2f, 3.9f), Quaternion.identity, CarDarkColor);
+        AddVisual(vehicle, "Tub", PrimitiveType.Cube, new Vector3(0f, -0.12f, -0.1f), new Vector3(1.78f, 0.38f, 2.24f), Quaternion.identity, CarColor);
+
+        // Капот.
+        AddVisual(vehicle, "Hood", PrimitiveType.Cube, new Vector3(0f, -0.02f, 1.5f), new Vector3(1.66f, 0.34f, 1.08f), Quaternion.identity, CarColor);
+        AddVisual(vehicle, "HoodPanel", PrimitiveType.Cube, new Vector3(0f, 0.17f, 1.44f), new Vector3(1.36f, 0.05f, 0.9f), Quaternion.identity, CarColor * 1.12f);
+        AddVisual(vehicle, "Grille", PrimitiveType.Cube, new Vector3(0f, -0.04f, 2.05f), new Vector3(0.82f, 0.24f, 0.03f), Quaternion.identity, CarDarkColor);
+        for (int i = 0; i < 5; i++)
+            AddVisual(vehicle, "GrilleBar", PrimitiveType.Cube, new Vector3(-0.32f + i * 0.16f, -0.04f, 2.07f), new Vector3(0.035f, 0.24f, 0.02f), Quaternion.identity, MetalColor);
+
+        // Багажник.
+        AddVisual(vehicle, "Trunk", PrimitiveType.Cube, new Vector3(0f, 0.03f, -1.61f), new Vector3(1.7f, 0.42f, 0.84f), Quaternion.identity, CarColor);
+        AddVisual(vehicle, "TrunkLid", PrimitiveType.Cube, new Vector3(0f, 0.26f, -1.61f), new Vector3(1.56f, 0.04f, 0.74f), Quaternion.identity, CarColor * 1.12f);
+
         foreach (float side in new[] { -1f, 1f })
         {
+            // Дверь с тёмным швом и подножка.
+            AddVisual(vehicle, "Door", PrimitiveType.Cube, new Vector3(side * 0.87f, 0.19f, -0.1f), new Vector3(0.05f, 0.34f, 2.1f), Quaternion.identity, CarColor);
+            AddVisual(vehicle, "DoorSeam", PrimitiveType.Cube, new Vector3(side * 0.9f, 0.05f, 0f), new Vector3(0.012f, 0.62f, 0.02f), Quaternion.identity, CarDarkColor);
+            AddVisual(vehicle, "Step", PrimitiveType.Cube, new Vector3(side * 0.96f, -0.32f, -0.1f), new Vector3(0.14f, 0.04f, 1.5f), Quaternion.identity, CarDarkColor);
+
+            // Арки над колёсами.
+            AddVisual(vehicle, "FenderFront", PrimitiveType.Cube, new Vector3(side * 0.93f, 0.06f, WheelBase), new Vector3(0.34f, 0.05f, 1.16f), Quaternion.identity, CarDarkColor);
+            AddVisual(vehicle, "FenderRear", PrimitiveType.Cube, new Vector3(side * 0.93f, 0.06f, -WheelBase), new Vector3(0.34f, 0.05f, 1.16f), Quaternion.identity, CarDarkColor);
+
             AddVisual(vehicle, "PillarFront", PrimitiveType.Cube, new Vector3(side * 0.87f, 0.49f, 0.97f), new Vector3(0.06f, 0.78f, 0.06f), Quaternion.identity, CarColor);
             AddVisual(vehicle, "PillarRear", PrimitiveType.Cube, new Vector3(side * 0.87f, 0.49f, -1.17f), new Vector3(0.06f, 0.78f, 0.06f), Quaternion.identity, CarColor);
+
+            AddVisual(vehicle, "MirrorArm", PrimitiveType.Cube, new Vector3(side * 0.97f, 0.38f, 0.98f), new Vector3(0.16f, 0.02f, 0.02f), Quaternion.identity, CarDarkColor);
+            AddVisual(vehicle, "Mirror", PrimitiveType.Cube, new Vector3(side * 1.04f, 0.42f, 0.97f), new Vector3(0.03f, 0.12f, 0.08f), Quaternion.identity, CarDarkColor);
+
+            AddVisual(vehicle, "RoofRail", PrimitiveType.Cube, new Vector3(side * 0.74f, 0.96f, -0.1f), new Vector3(0.04f, 0.04f, 2f), Quaternion.identity, CarDarkColor);
+            AddGlass(vehicle, "SideWindow", new Vector3(side * 0.87f, 0.61f, -0.1f), new Vector3(0.012f, 0.5f, 2.1f));
         }
+
+        AddVisual(vehicle, "Roof", PrimitiveType.Cube, new Vector3(0f, 0.88f, -0.1f), new Vector3(1.8f, 0.06f, 2.2f), Quaternion.identity, CarColor);
+        foreach (float z in new[] { -0.9f, -0.1f, 0.7f })
+            AddVisual(vehicle, "RoofBar", PrimitiveType.Cube, new Vector3(0f, 0.96f, z), new Vector3(1.5f, 0.03f, 0.04f), Quaternion.identity, CarDarkColor);
+
+        AddGlass(vehicle, "Windshield", new Vector3(0f, 0.53f, 0.97f), new Vector3(1.68f, 0.66f, 0.012f));
+        AddGlass(vehicle, "RearWindow", new Vector3(0f, 0.6f, -1.17f), new Vector3(1.68f, 0.52f, 0.012f));
+
+        // Бамперы и запаска сзади.
+        foreach (float z in new[] { 2.12f, -2.1f })
+            AddVisual(vehicle, "Bumper", PrimitiveType.Cube, new Vector3(0f, -0.27f, z), new Vector3(1.84f, 0.13f, 0.1f), Quaternion.identity, MetalColor);
+
+        AddTyre(vehicle, new Vector3(0f, 0.18f, -2.16f), Quaternion.Euler(0f, 90f, 0f));
+    }
+
+    static void AddTyre(Transform parent, Vector3 localPosition, Quaternion localRotation)
+    {
+        var tyre = new GameObject("Tyre");
+        tyre.transform.SetParent(parent, false);
+        tyre.transform.SetLocalPositionAndRotation(localPosition, localRotation);
+        tyre.transform.localScale = new Vector3(WheelWidth, WheelRadius * 2f, WheelRadius * 2f);
+        tyre.AddComponent<MeshFilter>().sharedMesh = tyreMesh != null ? tyreMesh : tyreMesh = ForestMeshes.BuildTyre();
+        tyre.AddComponent<MeshRenderer>().sharedMaterial = ProceduralModels.Lit(WheelColor, 0.3f, 0f, 0.1f);
+
+        // Обод закрывает отверстие покрышки.
+        ProceduralModels.Part(tyre.transform, "Rim", PrimitiveType.Cylinder, Vector3.zero, new Vector3(0.66f, 0.47f, 0.66f), ProceduralModels.Lit(RimColor, 0.2f, 0f, 0.3f), Quaternion.Euler(0f, 0f, 90f));
+        ProceduralModels.Part(tyre.transform, "Hub", PrimitiveType.Cylinder, Vector3.zero, new Vector3(0.22f, 0.54f, 0.22f), ProceduralModels.Lit(CarDarkColor), Quaternion.Euler(0f, 0f, 90f));
+    }
+
+    static void AddGlass(Transform parent, string name, Vector3 localPosition, Vector3 scale)
+    {
+        if (glassMaterial == null)
+            glassMaterial = new Material(Resources.Load<Shader>("ForestGlass"));
+
+        GameObject glass = ProceduralModels.Part(parent, name, PrimitiveType.Cube, localPosition, scale, glassMaterial);
+        glass.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
     }
 
     static void BuildInterior(VehicleController controller)
@@ -166,6 +229,8 @@ public static class RuntimeBootstrapper
         // Торпеда и руль ниже линии взгляда: дорога должна оставаться видна поверх них.
         AddVisual(vehicle, "Dashboard", PrimitiveType.Cube, new Vector3(0f, 0.19f, 0.85f), new Vector3(1.66f, 0.18f, 0.24f), Quaternion.identity, InteriorDark);
         AddVisual(vehicle, "SteeringWheel", PrimitiveType.Cylinder, new Vector3(-0.42f, 0.27f, 0.6f), new Vector3(0.28f, 0.012f, 0.28f), Quaternion.Euler(55f, 0f, 0f), InteriorBlack);
+        foreach (float x in new[] { -0.52f, -0.32f })
+            AddLampPart(controller, "Gauge", PrimitiveType.Cylinder, new Vector3(x, 0.3f, 0.76f), new Vector3(0.05f, 0.003f, 0.05f), Quaternion.Euler(-65f, 0f, 0f), DashGlowOff, DashGlow * 0.12f);
 
         controller.DriverSeat = BuildSeat(vehicle, "DriverSeatPos", -0.42f);
         controller.PassengerSeat = BuildSeat(vehicle, "PassengerSeatPos", 0.42f);
@@ -185,13 +250,7 @@ public static class RuntimeBootstrapper
     // Только вид: коллайдер на дочернем объекте стал бы частью формы и массы машины.
     static void AddVisual(Transform parent, string name, PrimitiveType shape, Vector3 localPosition, Vector3 scale, Quaternion localRotation, Color color)
     {
-        GameObject part = GameObject.CreatePrimitive(shape);
-        Object.DestroyImmediate(part.GetComponent<Collider>());
-        part.name = name;
-        Paint(part, color);
-        part.transform.SetParent(parent, false);
-        part.transform.SetLocalPositionAndRotation(localPosition, localRotation);
-        part.transform.localScale = scale;
+        ProceduralModels.Part(parent, name, shape, localPosition, scale, ProceduralModels.Lit(color, 1f, 0f, 0.28f), localRotation);
     }
 
     static void AddVehicleLights(VehicleController controller)
@@ -202,12 +261,16 @@ public static class RuntimeBootstrapper
             headlight.type = LightType.Spot;
             headlight.range = 70f;
             headlight.spotAngle = 65f;
-            headlight.intensity = 8f;
+            headlight.intensity = 3f;
             headlight.color = HeadlightColor;
             controller.AddLight(headlight);
+            LightBeam.Attach(headlight, HeadlightBeamLength, HeadlightBeamStrength);
 
-            AddLamp(controller, "HeadLamp", new Vector3(side * 0.6f, -0.1f, 2.01f), LampOff, HeadlightColor * 1.5f);
-            AddLamp(controller, "TailLamp", new Vector3(side * 0.7f, -0.1f, -2.01f), TailOff, TailEmission);
+            // Цилиндр лежит осью вдоль машины, поэтому фара видна спереди кругом, а чёрное кольцо — её корпус.
+            Quaternion alongCar = Quaternion.Euler(90f, 0f, 0f);
+            AddVisual(controller.transform, "HeadLampHousing", PrimitiveType.Cylinder, new Vector3(side * 0.62f, -0.02f, 2.03f), new Vector3(0.3f, 0.03f, 0.3f), alongCar, CarDarkColor);
+            AddLampPart(controller, "HeadLamp", PrimitiveType.Cylinder, new Vector3(side * 0.62f, -0.02f, 2.06f), new Vector3(0.24f, 0.012f, 0.24f), alongCar, LampOff, HeadlightColor * 3f);
+            AddLampPart(controller, "TailLamp", PrimitiveType.Cylinder, new Vector3(side * 0.7f, 0.06f, -2.04f), new Vector3(0.16f, 0.012f, 0.16f), alongCar, TailOff, TailEmission * 2f);
         }
 
         // Один габаритный свет на оба фонаря: подсветке за машиной больше не нужно.
@@ -232,15 +295,10 @@ public static class RuntimeBootstrapper
         return vehicleLight;
     }
 
-    static void AddLamp(VehicleController controller, string name, Vector3 localPosition, Color color, Color emission)
+    // У лампы свой материал: её свечение включается отдельно от остальных деталей того же цвета.
+    static void AddLampPart(VehicleController controller, string name, PrimitiveType shape, Vector3 localPosition, Vector3 scale, Quaternion localRotation, Color color, Color emission)
     {
-        GameObject lamp = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        Object.DestroyImmediate(lamp.GetComponent<Collider>());
-        lamp.name = name;
-        Paint(lamp, color);
-        lamp.transform.SetParent(controller.transform, false);
-        lamp.transform.localPosition = localPosition;
-        lamp.transform.localScale = new Vector3(0.3f, 0.15f, 0.04f);
+        GameObject lamp = ProceduralModels.Part(controller.transform, name, shape, localPosition, scale, ProceduralModels.CreateLit(color), localRotation);
         controller.AddLamp(lamp.GetComponent<Renderer>(), emission);
     }
 
@@ -263,13 +321,7 @@ public static class RuntimeBootstrapper
         var visual = new GameObject(name + "_Visual").transform;
         visual.SetParent(controller.transform, false);
 
-        GameObject cylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        Object.DestroyImmediate(cylinder.GetComponent<Collider>());
-        cylinder.name = "Tyre";
-        Paint(cylinder, WheelColor);
-        cylinder.transform.SetParent(visual, false);
-        cylinder.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-        cylinder.transform.localScale = new Vector3(WheelRadius * 2f, WheelWidth * 0.5f, WheelRadius * 2f);
+        AddTyre(visual, Vector3.zero, Quaternion.identity);
 
         controller.AddWheel(wheel, visual, isFront);
     }
@@ -297,8 +349,9 @@ public static class RuntimeBootstrapper
         var camera = cameraObject.AddComponent<Camera>();
         camera.nearClipPlane = 0.05f;
         camera.farClipPlane = CameraFarClip;
-        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.clearFlags = CameraClearFlags.Skybox;
         cameraObject.AddComponent<AudioListener>();
+        cameraObject.AddComponent<ForestPostProcess>();
         cameraObject.AddComponent<PlayerCamera>();
 
         var hold = new GameObject("HoldPosition");
@@ -312,28 +365,4 @@ public static class RuntimeBootstrapper
         cameraObject.AddComponent<InteractionUI>();
     }
 
-    static GameObject CreateItem(string name, PrimitiveType shape, Vector3 position, Vector3 scale, float mass, Color color)
-    {
-        GameObject item = CreatePrimitive(name, shape, position, scale, color);
-        item.tag = InteractionRay.PickupableTag;
-        item.AddComponent<Rigidbody>().mass = mass;
-        return item;
-    }
-
-    static GameObject CreatePrimitive(string name, PrimitiveType shape, Vector3 position, Vector3 scale, Color color)
-    {
-        GameObject primitive = GameObject.CreatePrimitive(shape);
-        primitive.name = name;
-        primitive.transform.position = position;
-        primitive.transform.localScale = scale;
-        Paint(primitive, color);
-        return primitive;
-    }
-
-    static void Paint(GameObject target, Color color)
-    {
-        if (litShader == null)
-            litShader = Resources.Load<Shader>("ForestLit");
-        target.GetComponent<Renderer>().sharedMaterial = new Material(litShader) { color = color };
-    }
 }

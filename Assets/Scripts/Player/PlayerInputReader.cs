@@ -10,11 +10,10 @@ public class PlayerInputReader : MonoBehaviour
     public Vector2 LookDelta { get; private set; }
     public bool GrabHeld { get; private set; }
     public bool PushHeld { get; private set; }
-    public bool BrakeHeld { get; private set; }
 
     InputActionMap map;
-    InputAction move, look, grab, throwItem, push, interact, lowGear, brake, notebook, flashlight, headlights, recover, cancel;
-    bool grabLatched, throwLatched, interactLatched, lowGearLatched, notebookLatched, flashlightLatched, headlightsLatched, recoverLatched;
+    InputAction move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, recover, cancel;
+    bool grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, recoverLatched;
 
     void Awake()
     {
@@ -32,8 +31,7 @@ public class PlayerInputReader : MonoBehaviour
         throwItem = map.AddAction("Throw", InputActionType.Button, "<Mouse>/rightButton");
         push = map.AddAction("Push", InputActionType.Button, "<Keyboard>/f");
         interact = map.AddAction("Interact", InputActionType.Button, "<Keyboard>/e");
-        lowGear = map.AddAction("LowGear", InputActionType.Button, "<Keyboard>/g");
-        brake = map.AddAction("Brake", InputActionType.Button, "<Keyboard>/space");
+        space = map.AddAction("JumpOrHandbrake", InputActionType.Button, "<Keyboard>/space");
         notebook = map.AddAction("Notebook", InputActionType.Button, "<Keyboard>/tab");
         flashlight = map.AddAction("Flashlight", InputActionType.Button, "<Keyboard>/t");
         headlights = map.AddAction("Headlights", InputActionType.Button, "<Keyboard>/l");
@@ -59,7 +57,6 @@ public class PlayerInputReader : MonoBehaviour
             LookDelta = Vector2.zero;
             GrabHeld = false;
             PushHeld = false;
-            BrakeHeld = false;
             return;
         }
 
@@ -67,18 +64,25 @@ public class PlayerInputReader : MonoBehaviour
         LookDelta = look.ReadValue<Vector2>();
         GrabHeld = grab.IsPressed();
         PushHeld = push.IsPressed();
-        BrakeHeld = brake.IsPressed();
 
         // Между кадрами может не быть ни одного шага физики, поэтому нажатия
         // запоминаются до тех пор, пока их не заберёт FixedUpdate.
         grabLatched |= grab.WasPressedThisFrame();
         throwLatched |= throwItem.WasPressedThisFrame();
         interactLatched |= interact.WasPressedThisFrame();
-        lowGearLatched |= lowGear.WasPressedThisFrame();
+        spaceLatched |= space.WasPressedThisFrame();
         notebookLatched |= notebook.WasPressedThisFrame();
         flashlightLatched |= flashlight.WasPressedThisFrame();
         headlightsLatched |= headlights.WasPressedThisFrame();
         recoverLatched |= recover.WasPressedThisFrame();
+    }
+
+    // Пробел один: пешком это прыжок, за рулём — ручник. Забирает тот, кто сейчас активен.
+    public bool ConsumeSpace()
+    {
+        bool pressed = spaceLatched;
+        spaceLatched = false;
+        return pressed;
     }
 
     public bool ConsumeRecover()
@@ -113,13 +117,6 @@ public class PlayerInputReader : MonoBehaviour
     {
         bool pressed = interactLatched;
         interactLatched = false;
-        return pressed;
-    }
-
-    public bool ConsumeLowGear()
-    {
-        bool pressed = lowGearLatched;
-        lowGearLatched = false;
         return pressed;
     }
 

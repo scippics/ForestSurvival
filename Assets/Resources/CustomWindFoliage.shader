@@ -1,5 +1,6 @@
-// Ветер для растительности. Вершины с Y <= 0 в пространстве модели неподвижны, поэтому
-// начало координат модели должно стоять у основания. Лежит в Resources, чтобы попасть в сборку.
+// Ветер и материал растительности. Вершины с Y <= 0 в пространстве модели неподвижны, поэтому
+// начало координат модели должно стоять у основания. Красный канал цвета вершин — затенение
+// внутри кроны и у корней, зелёный — кончик ветки. Лежит в Resources, чтобы попасть в сборку.
 Shader "Forest/CustomWindFoliage"
 {
     Properties
@@ -9,6 +10,10 @@ Shader "Forest/CustomWindFoliage"
         _WindStrength ("Wind Strength", Range(0, 0.5)) = 0.05
         _WindSpeed ("Wind Speed", Range(0, 5)) = 1
         _FlutterStrength ("Flutter Strength", Range(0, 0.2)) = 0.02
+        _Bark ("Bark", Range(0, 1)) = 0
+        _Needles ("Needles", Range(0, 1)) = 0
+        _Grass ("Grass", Range(0, 1)) = 0
+        _Moss ("Moss", Range(0, 1)) = 0
     }
     SubShader
     {
@@ -27,19 +32,28 @@ Shader "Forest/CustomWindFoliage"
         {
             float3 worldPos;
             float3 worldNormal;
+            float3 viewDir;
+            float4 color : COLOR;
+            float variation;
+            float height;
         };
 
+        sampler2D _ForestNoise;
+        float3 _ForestSunDirection;
+        float3 _ForestSunColor;
         half _Smoothness;
         float _WindStrength;
         float _WindSpeed;
         float _FlutterStrength;
+        half _Bark, _Needles, _Grass, _Moss;
 
         UNITY_INSTANCING_BUFFER_START(FoliageProps)
             UNITY_DEFINE_INSTANCED_PROP(fixed4, _Color)
         UNITY_INSTANCING_BUFFER_END(FoliageProps)
 
-        void vert(inout appdata_full v)
+        void vert(inout appdata_full v, out Input o)
         {
+            UNITY_INITIALIZE_OUTPUT(Input, o);
             UNITY_SETUP_INSTANCE_ID(v);
 
             // Смещение растёт квадратично: ствол гнётся у вершины, а не наклоняется целиком.
@@ -60,13 +74,60 @@ Shader "Forest/CustomWindFoliage"
 
             float3 worldOffset = float3(gustX + flutter * _FlutterStrength / max(_WindStrength, 0.001), 0, gustZ) * (_WindStrength * bend);
             v.vertex.xyz += mul((float3x3)unity_WorldToObject, worldOffset);
+
+            // Свой оттенок у каждого экземпляра: лес не выглядит копией одного дерева.
+            o.variation = frac(sin(dot(origin.xz, float2(12.9898, 78.233))) * 43758.5453);
+            o.height = height;
         }
 
         void surf(Input IN, inout SurfaceOutputStandard o)
         {
-            o.Albedo = UNITY_ACCESS_INSTANCED_PROP(FoliageProps, _Color).rgb;
+            float3 albedo = UNITY_ACCESS_INSTANCED_PROP(FoliageProps, _Color).rgb;
+            float occlusion = IN.color.r;
+            float tip = IN.color.g;
+            float3 world = IN.worldPos;
+
+            albedo *= lerp(0.8, 1.2, IN.variation);
+            albedo.r *= lerp(0.88, 1.18, frac(IN.variation * 7.31));
+
+            if (_Bark > 0)
+            {
+                float fibre = tex2D(_ForestNoise, float2((world.x + world.z) * 0.22, world.y * 0.1)).a;
+                albedo *= 0.55 + 0.9 * fibre;
+            }
+
+            if (_Needles > 0)
+            {
+                float streak = tex2D(_ForestNoise, world.xz * 1.6 + world.y * 0.9).b;
+                albedo *= 0.72 + 0.56 * streak;
+                albedo = lerp(albedo, albedo * float3(1.5, 1.6, 1.1) + 0.006, tip * 0.7);
+            }
+
+            if (_Grass > 0)
+            {
+                // Тот же крупный шум, что на земле: трава желтеет там, где подстилка суше.
+                float macro = tex2D(_ForestNoise, world.xz * 0.017).r;
+                albedo = lerp(albedo, albedo * float3(1.22, 1.03, 0.72), smoothstep(0.35, 0.65, macro));
+                albedo *= lerp(0.9, 1.15, tip);
+            }
+
+            if (_Moss > 0)
+            {
+                // Мох растёт у корней стволов и сверху на камнях.
+                float blotch = tex2D(_ForestNoise, (world.xz + world.y) * 0.8).g;
+                float place = max(saturate(IN.worldNormal.y), saturate(1.0 - IN.height * 6.0));
+                albedo = lerp(albedo, float3(0.018, 0.028, 0.01), smoothstep(0.3, 0.8, blotch) * place * 0.75 * _Moss);
+            }
+
+            albedo *= lerp(0.45, 1.0, occlusion);
+            o.Albedo = albedo;
+            o.Occlusion = occlusion;
             o.Smoothness = _Smoothness;
-            o.Emission = o.Albedo * ForestDynamicLighting(IN.worldPos, IN.worldNormal);
+
+            // Просвет кончиков хвои и травы, когда смотришь против солнца.
+            float backlight = pow(saturate(dot(-normalize(IN.viewDir), _ForestSunDirection)), 3.0) * max(tip, _Grass * 0.3);
+
+            o.Emission = albedo * (ForestDynamicLighting(IN.worldPos, IN.worldNormal) + _ForestSunColor * backlight * 0.9);
             o.Alpha = 1;
         }
         ENDCG

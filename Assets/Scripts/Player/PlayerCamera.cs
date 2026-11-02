@@ -11,7 +11,9 @@ public class PlayerCamera : MonoBehaviour
     const float SeatedMaxPitchDown = 60f;
     const float FlashlightRange = 45f;
     const float FlashlightAngle = 55f;
-    const float FlashlightIntensity = 3.2f;
+    const float FlashlightIntensity = 1.9f;
+    const float FlashlightBeamLength = 14f;
+    const float FlashlightBeamStrength = 0.06f;
 
     static readonly Color FlashlightColor = new Color(0.78f, 0.87f, 1f);
 
@@ -53,6 +55,7 @@ public class PlayerCamera : MonoBehaviour
         Flashlight.renderMode = LightRenderMode.ForcePixel;
         Flashlight.enabled = false;
         ForestLights.Register(Flashlight);
+        LightBeam.Attach(Flashlight, FlashlightBeamLength, FlashlightBeamStrength);
     }
 
     // Движение создаётся после камеры, поэтому его нельзя получить в Awake.

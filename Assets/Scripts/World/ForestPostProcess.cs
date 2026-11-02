@@ -1,0 +1,159 @@
+using UnityEngine;
+
+// Постобработка на камере. Затенение и лучи считаются в уменьшенном разрешении, поэтому
+// почти не зависят от размера окна. Сами формулы в Resources/ForestPost.shader.
+[RequireComponent(typeof(Camera))]
+public class ForestPostProcess : MonoBehaviour
+{
+    const int PassAo = 0;
+    const int PassAoBlur = 1;
+    const int PassBloomPrefilter = 2;
+    const int PassBloomDown = 3;
+    const int PassBloomUp = 4;
+    const int PassRayMask = 5;
+    const int PassRayBlur = 6;
+    const int PassComposite = 7;
+
+    const int BloomLevels = 4;
+    const float AoRadius = 1.3f;
+    const float AoStrength = 2.6f;
+    const float BloomThreshold = 0.85f;
+    const float BloomStrength = 0.55f;
+    const float RayStepFirst = 0.065f;
+    const float RayStepSecond = 0.022f;
+    const float RayStrength = 0.55f;
+    const float Exposure = 1.25f;
+    const float Vignette = 1.15f;
+
+    static readonly int AoTexId = Shader.PropertyToID("_AoTex");
+    static readonly int BloomTexId = Shader.PropertyToID("_BloomTex");
+    static readonly int RayTexId = Shader.PropertyToID("_RayTex");
+    static readonly int AoDirectionId = Shader.PropertyToID("_AoDirection");
+    static readonly int AoRadiusId = Shader.PropertyToID("_AoRadius");
+    static readonly int AoStrengthId = Shader.PropertyToID("_AoStrength");
+    static readonly int BloomThresholdId = Shader.PropertyToID("_BloomThreshold");
+    static readonly int BloomStrengthId = Shader.PropertyToID("_BloomStrength");
+    static readonly int SunViewportId = Shader.PropertyToID("_SunViewport");
+    static readonly int RayStepId = Shader.PropertyToID("_RayStep");
+    static readonly int RayStrengthId = Shader.PropertyToID("_RayStrength");
+    static readonly int RayColorId = Shader.PropertyToID("_RayColor");
+    static readonly int ExposureId = Shader.PropertyToID("_Exposure");
+    static readonly int FogDensityId = Shader.PropertyToID("_FogDensity");
+    static readonly int GrainTimeId = Shader.PropertyToID("_GrainTime");
+    static readonly int VignetteId = Shader.PropertyToID("_VignetteStrength");
+
+    Camera view;
+    Light sun;
+    Material material;
+    readonly RenderTexture[] bloomChain = new RenderTexture[BloomLevels];
+
+    void Awake()
+    {
+        view = GetComponent<Camera>();
+        view.allowHDR = true;
+        view.allowMSAA = true;
+        view.depthTextureMode |= DepthTextureMode.Depth;
+        material = new Material(Resources.Load<Shader>("ForestPost"));
+        sun = FindAnyObjectByType<DayNightCycle>().GetComponent<Light>();
+
+        material.SetFloat(AoRadiusId, AoRadius);
+        material.SetFloat(AoStrengthId, AoStrength);
+        material.SetFloat(BloomThresholdId, BloomThreshold);
+        material.SetFloat(BloomStrengthId, BloomStrength);
+        material.SetFloat(ExposureId, Exposure);
+        material.SetFloat(VignetteId, Vignette);
+    }
+
+    void OnRenderImage(RenderTexture source, RenderTexture destination)
+    {
+        RenderTexture ao = RenderAo(source);
+        RenderTexture bloom = RenderBloom(source);
+        RenderTexture rays = RenderRays(source);
+
+        material.SetFloat(FogDensityId, RenderSettings.fogDensity);
+        material.SetFloat(GrainTimeId, Time.unscaledTime % 97f * 61f);
+        material.SetTexture(AoTexId, ao);
+        material.SetTexture(BloomTexId, bloom);
+        material.SetTexture(RayTexId, rays);
+        Graphics.Blit(source, destination, material, PassComposite);
+
+        RenderTexture.ReleaseTemporary(ao);
+        RenderTexture.ReleaseTemporary(bloom);
+        RenderTexture.ReleaseTemporary(rays);
+    }
+
+    RenderTexture RenderAo(RenderTexture source)
+    {
+        int width = source.width / 2;
+        int height = source.height / 2;
+        RenderTexture first = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.RGHalf);
+        RenderTexture second = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.RGHalf);
+        first.filterMode = FilterMode.Bilinear;
+        second.filterMode = FilterMode.Bilinear;
+
+        Graphics.Blit(source, first, material, PassAo);
+        material.SetVector(AoDirectionId, new Vector2(1f / width, 0f));
+        Graphics.Blit(first, second, material, PassAoBlur);
+        material.SetVector(AoDirectionId, new Vector2(0f, 1f / height));
+        Graphics.Blit(second, first, material, PassAoBlur);
+
+        RenderTexture.ReleaseTemporary(second);
+        return first;
+    }
+
+    RenderTexture RenderBloom(RenderTexture source)
+    {
+        int width = source.width / 2;
+        int height = source.height / 2;
+        RenderTextureFormat format = source.format;
+
+        bloomChain[0] = RenderTexture.GetTemporary(width, height, 0, format);
+        Graphics.Blit(source, bloomChain[0], material, PassBloomPrefilter);
+        for (int level = 1; level < BloomLevels; level++)
+        {
+            width = Mathf.Max(width / 2, 2);
+            height = Mathf.Max(height / 2, 2);
+            bloomChain[level] = RenderTexture.GetTemporary(width, height, 0, format);
+            Graphics.Blit(bloomChain[level - 1], bloomChain[level], material, PassBloomDown);
+        }
+
+        for (int level = BloomLevels - 1; level > 0; level--)
+        {
+            Graphics.Blit(bloomChain[level], bloomChain[level - 1], material, PassBloomUp);
+            RenderTexture.ReleaseTemporary(bloomChain[level]);
+        }
+        return bloomChain[0];
+    }
+
+    RenderTexture RenderRays(RenderTexture source)
+    {
+        int width = source.width / 4;
+        int height = source.height / 4;
+        RenderTexture first = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
+        first.filterMode = FilterMode.Bilinear;
+
+        Vector3 sunPoint = view.WorldToViewportPoint(view.transform.position - sun.transform.forward * view.farClipPlane);
+        if (!sun.enabled || sunPoint.z <= 0f)
+        {
+            Graphics.Blit(Texture2D.blackTexture, first);
+            material.SetFloat(RayStrengthId, 0f);
+            return first;
+        }
+
+        RenderTexture second = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
+        second.filterMode = FilterMode.Bilinear;
+
+        material.SetVector(SunViewportId, sunPoint);
+        material.SetFloat(RayStrengthId, RayStrength);
+        material.SetColor(RayColorId, sun.color * sun.intensity);
+
+        Graphics.Blit(source, first, material, PassRayMask);
+        material.SetFloat(RayStepId, RayStepFirst);
+        Graphics.Blit(first, second, material, PassRayBlur);
+        material.SetFloat(RayStepId, RayStepSecond);
+        Graphics.Blit(second, first, material, PassRayBlur);
+
+        RenderTexture.ReleaseTemporary(second);
+        return first;
+    }
+}

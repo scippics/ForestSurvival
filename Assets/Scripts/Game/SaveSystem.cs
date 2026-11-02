@@ -31,8 +31,9 @@ public static class SaveSystem
         public bool seated;
         public Vector3 vehiclePosition;
         public Quaternion vehicleRotation;
-        public bool lowGear;
         public bool lightsOn;
+        public bool handbrakeOn;
+        public List<Vector2Int> visitedCamps = new List<Vector2Int>();
         public List<string> recipes = new List<string>();
         public List<ItemState> items = new List<ItemState>();
     }
@@ -48,6 +49,7 @@ public static class SaveSystem
         var player = UnityEngine.Object.FindAnyObjectByType<PlayerSeat>();
         var view = player.GetComponentInChildren<PlayerCamera>();
         var vehicle = UnityEngine.Object.FindAnyObjectByType<VehicleController>();
+        var forest = UnityEngine.Object.FindAnyObjectByType<OptimizedForestGenerator>();
 
         var data = new SaveData
         {
@@ -61,8 +63,9 @@ public static class SaveSystem
             seated = player.IsSeated,
             vehiclePosition = vehicle.transform.position,
             vehicleRotation = vehicle.transform.rotation,
-            lowGear = vehicle.isLowGear,
             lightsOn = vehicle.LightsOn,
+            handbrakeOn = vehicle.HandbrakeOn,
+            visitedCamps = forest.VisitedCamps,
             recipes = new List<string>(player.GetComponent<BlueprintNotebook>().unlockedRecipes)
         };
 
@@ -101,8 +104,8 @@ public static class SaveSystem
         UnityEngine.Object.FindAnyObjectByType<DayNightCycle>().TimeOfDay = data.timeOfDay;
 
         PlaceBody(vehicle.GetComponent<Rigidbody>(), data.vehiclePosition, data.vehicleRotation);
-        vehicle.isLowGear = data.lowGear;
         vehicle.SetLights(data.lightsOn);
+        vehicle.HandbrakeOn = data.handbrakeOn;
 
         var notebook = player.GetComponent<BlueprintNotebook>();
         notebook.unlockedRecipes = new List<string>(data.recipes);
@@ -118,9 +121,24 @@ public static class SaveSystem
 
             // Предмета нет в файле — значит, его уже забрали, как чертёж.
             if (saved.TryGetValue(body.name, out ItemState item))
+            {
                 PlaceBody(body, item.position, item.rotation);
+                saved.Remove(body.name);
+            }
             else
+            {
                 UnityEngine.Object.Destroy(body.gameObject);
+            }
+        }
+
+        // Лут стоянок появляется, только когда игрок к ним подходит, поэтому после запуска
+        // его ещё нет на месте: всё, что осталось в словаре, создаётся заново.
+        var forest = UnityEngine.Object.FindAnyObjectByType<OptimizedForestGenerator>();
+        forest.VisitedCamps = data.visitedCamps ?? new List<Vector2Int>();
+        foreach (ItemState item in saved.Values)
+        {
+            if (item.name.StartsWith(ProceduralModels.LootPrefix))
+                forest.Track(ProceduralModels.CreateLoot(item.name, item.position, item.rotation).GetComponent<Rigidbody>());
         }
 
         view.Flashlight.enabled = data.flashlightOn;

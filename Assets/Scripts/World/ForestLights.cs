@@ -37,7 +37,8 @@ public static class ForestLights
             position.w = forestLight.range;
             Vector4 direction = source.forward;
             direction.w = isSpot ? Mathf.Cos(forestLight.spotAngle * 0.5f * Mathf.Deg2Rad) : -2f;
-            Vector4 color = forestLight.color * forestLight.intensity;
+            // Яркость источника Unity тоже переводит в линейное пространство, поэтому вместе с цветом.
+            Vector4 color = (forestLight.color * forestLight.intensity).linear;
             color.w = isSpot ? Mathf.Cos(forestLight.spotAngle * 0.3f * Mathf.Deg2Rad) : -1f;
 
             Positions[count] = position;

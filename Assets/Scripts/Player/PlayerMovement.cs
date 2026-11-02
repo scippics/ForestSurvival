@@ -9,6 +9,9 @@ public class PlayerMovement : MonoBehaviour
     const float AirAcceleration = 6f;
     const float MaxSlopeAngle = 50f;
     const float GroundProbe = 0.1f;
+    const float JumpHeight = 1.05f;
+    const float BurdenedJumpHeight = 0.5f;
+    const float JumpGroundLockout = 0.2f;
 
     public bool IsGrounded { get; private set; }
 
@@ -35,6 +38,7 @@ public class PlayerMovement : MonoBehaviour
     Rigidbody body;
     CapsuleCollider capsule;
     Vector3 groundNormal = Vector3.up;
+    float jumpLockout;
 
     void Awake()
     {
@@ -66,6 +70,7 @@ public class PlayerMovement : MonoBehaviour
     void FixedUpdate()
     {
         UpdateGround();
+        TryJump();
 
         Vector3 wish = Quaternion.Euler(0f, view.Yaw, 0f) * new Vector3(input.Move.x, 0f, input.Move.y);
         if (IsGrounded)
@@ -83,8 +88,33 @@ public class PlayerMovement : MonoBehaviour
         body.AddForce(change, ForceMode.VelocityChange);
     }
 
+    // Нажатие в воздухе сгорает: иначе оно сработало бы само при приземлении.
+    void TryJump()
+    {
+        if (!input.ConsumeSpace() || !IsGrounded)
+            return;
+
+        float height = IsBurdened ? BurdenedJumpHeight : JumpHeight;
+        Vector3 velocity = body.linearVelocity;
+        velocity.y = Mathf.Sqrt(2f * height * -Physics.gravity.y);
+        body.linearVelocity = velocity;
+
+        IsGrounded = false;
+        groundNormal = Vector3.up;
+        jumpLockout = JumpGroundLockout;
+    }
+
     void UpdateGround()
     {
+        // Сразу после прыжка ноги ещё в зоне проверки, а земля гасила бы скорость вверх.
+        if (jumpLockout > 0f)
+        {
+            jumpLockout -= Time.fixedDeltaTime;
+            IsGrounded = false;
+            groundNormal = Vector3.up;
+            return;
+        }
+
         float radius = capsule.radius * 0.95f;
         float distance = capsule.height * 0.5f - radius + GroundProbe;
         IsGrounded = Physics.SphereCast(body.position, radius, Vector3.down, out RaycastHit hit, distance,

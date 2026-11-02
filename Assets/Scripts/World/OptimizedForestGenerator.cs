@@ -50,17 +50,39 @@ public class OptimizedForestGenerator : MonoBehaviour
     const float NoiseOffset = 97.3f;
 
     const float MudFrequency = 0.07f;
-    const float MudDepthMin = 0.4f;
+    const float MudDepthMin = 0.25f;
     const float MudNoiseMin = 0.35f;
     const float MudNoiseMax = 0.82f;
 
     const float StartClearingRadius = 30f;
+
+    // Поляна целиком лежит в своём чанке, вместе с полосой сглаживания рельефа:
+    // тогда соседние чанки не нужно проверять ни для деревьев, ни для высоты.
+    const float CampChance = 0.24f;
+    const float CampRadius = 9f;
+    const float CampBlendRadius = 12f;
+    const int CampMinDistanceFromStart = 2;
+    const float CampLootMinDistance = 2.5f;
+    const float CampLootMaxDistance = 6.5f;
+    const int CampLootMin = 3;
+    const int CampLootMax = 5;
+    const float CampLootDropHeight = 0.5f;
+
+    const float DeadTreeChance = 0.1f;
+    const int RocksPerChunk = 14;
+    const int FernsPerChunk = 110;
+    const float FernNoiseMin = 0.42f;
 
     public const string TerrainTag = "Terrain";
 
     static readonly Color TrunkColor = new Color(0.2f, 0.14f, 0.09f);
     static readonly Color CrownColor = new Color(0.1f, 0.2f, 0.11f);
     static readonly Color GrassColor = new Color(0.17f, 0.19f, 0.11f);
+    static readonly Color DeadTrunkColor = new Color(0.17f, 0.15f, 0.13f);
+    static readonly Color FernColor = new Color(0.09f, 0.17f, 0.07f);
+    static readonly Color RockColor = new Color(0.27f, 0.27f, 0.26f);
+
+    static readonly Dictionary<Vector2Int, Camp> CampCache = new Dictionary<Vector2Int, Camp>();
 
     public int ActiveChunks => chunks.Count;
     public int ActivePhysicalTrees { get; private set; }
@@ -69,6 +91,16 @@ public class OptimizedForestGenerator : MonoBehaviour
     public int LastGrassBatchesTotal { get; private set; }
     public int LastGrassBatchesDrawn { get; private set; }
     public int LastTreeChunksDrawn { get; private set; }
+
+    // Стоянки, где лут уже выпал: дальше за него отвечает сохранение, а не генератор.
+    public List<Vector2Int> VisitedCamps { get; set; } = new List<Vector2Int>();
+
+    struct Camp
+    {
+        public bool Exists;
+        public float X;
+        public float Z;
+    }
 
     class TerrainPiece
     {
@@ -87,6 +119,14 @@ public class OptimizedForestGenerator : MonoBehaviour
         public bool TerrainPending;
         public Matrix4x4[] Trees;
         public int TreeCount;
+        public Matrix4x4[] Crowns;
+        public int CrownCount;
+        public Matrix4x4[] DeadTrees;
+        public int DeadCount;
+        public Matrix4x4[] Rocks;
+        public int RockCount;
+        public Matrix4x4[] Ferns;
+        public int FernCount;
         public readonly List<CapsuleCollider> Colliders = new List<CapsuleCollider>();
         public readonly List<Matrix4x4[]> GrassBatches = new List<Matrix4x4[]>();
         public int GrassCount;
@@ -102,14 +142,17 @@ public class OptimizedForestGenerator : MonoBehaviour
     readonly Stack<TerrainPiece> terrainPool = new Stack<TerrainPiece>();
     readonly List<Rigidbody> trackedBodies = new List<Rigidbody>();
     readonly Plane[] frustumPlanes = new Plane[6];
+    readonly Dictionary<Vector2Int, GameObject> campObjects = new Dictionary<Vector2Int, GameObject>();
 
     readonly Vector3[] terrainVertices = new Vector3[TerrainVertices * TerrainVertices];
     readonly Vector3[] terrainNormals = new Vector3[TerrainVertices * TerrainVertices];
     readonly Color32[] terrainColors = new Color32[TerrainVertices * TerrainVertices];
+    readonly Vector2[] terrainRoadOffsets = new Vector2[TerrainVertices * TerrainVertices];
+    readonly Vector4[] terrainTangents = new Vector4[TerrainVertices * TerrainVertices];
     int[] terrainTriangles;
 
-    Mesh trunkMesh, crownMesh, grassMesh;
-    Material trunkMaterial, crownMaterial, grassMaterial, groundMaterial;
+    Mesh trunkMesh, crownMesh, grassMesh, branchMesh, fernMesh, rockMesh;
+    Material trunkMaterial, crownMaterial, grassMaterial, groundMaterial, deadMaterial, fernMaterial, rockMaterial;
     Vector2Int centerChunk;
 
     // В Awake: земля должна появиться раньше первого шага физики, иначе машина и предметы провалятся.
@@ -118,12 +161,27 @@ public class OptimizedForestGenerator : MonoBehaviour
         trunkMesh = ForestMeshes.BuildTrunk(TrunkModelRadius);
         crownMesh = ForestMeshes.BuildCrown();
         grassMesh = ForestMeshes.BuildGrass();
+        branchMesh = ForestMeshes.BuildDeadBranches();
+        fernMesh = ForestMeshes.BuildFern();
+        rockMesh = ForestMeshes.BuildRock();
 
         trunkMaterial = CreateFoliageMaterial(TrunkColor, 0.3f, 0f);
+        trunkMaterial.SetFloat("_Bark", 1f);
+        trunkMaterial.SetFloat("_Moss", 0.8f);
         crownMaterial = CreateFoliageMaterial(CrownColor, 0.3f, 0.04f);
+        crownMaterial.SetFloat("_Needles", 1f);
         grassMaterial = CreateFoliageMaterial(GrassColor, 0.08f, 0.03f);
+        grassMaterial.SetFloat("_Grass", 1f);
+        deadMaterial = CreateFoliageMaterial(DeadTrunkColor, 0.3f, 0f);
+        deadMaterial.SetFloat("_Bark", 1f);
+        fernMaterial = CreateFoliageMaterial(FernColor, 0.09f, 0.04f);
+        fernMaterial.SetFloat("_Grass", 1f);
+        rockMaterial = CreateFoliageMaterial(RockColor, 0f, 0f);
+        rockMaterial.SetFloat("_Moss", 1f);
         groundMaterial = new Material(Resources.Load<Shader>("ForestGround"));
         terrainTriangles = BuildTerrainTriangles();
+        for (int i = 0; i < terrainTangents.Length; i++)
+            terrainTangents[i] = new Vector4(1f, 0f, 0f, 1f);
 
         foreach (Rigidbody body in FindObjectsByType<Rigidbody>(FindObjectsSortMode.None))
         {
@@ -209,11 +267,51 @@ public class OptimizedForestGenerator : MonoBehaviour
 
     static bool IsBlockedForPlants(float x, float z, float roadCenterX)
     {
-        return Mathf.Abs(x - roadCenterX) < RoadHalfWidth || IsInStartClearing(x, z);
+        return Mathf.Abs(x - roadCenterX) < RoadHalfWidth || IsInStartClearing(x, z) || CampInfluence(x, z) > 0f;
     }
 
-    // 0 — сухо, 1 — самая глубокая яма. Глубина плавает вдоль дороги: мелкие участки
-    // проходятся на обычной передаче, а из ям выбирается только пониженная.
+    // Стоянка ставится сбоку от дороги, чтобы её можно было заметить из машины.
+    static Camp GetCamp(Vector2Int coord)
+    {
+        if (CampCache.TryGetValue(coord, out Camp camp))
+            return camp;
+
+        var random = new System.Random(ChunkSeed(coord, 4));
+        camp = new Camp();
+        if (random.NextDouble() < CampChance && Mathf.Max(Mathf.Abs(coord.x), Mathf.Abs(coord.y)) >= CampMinDistanceFromStart)
+        {
+            float centerX = coord.x * ChunkSize;
+            float room = ChunkSize * 0.5f - CampBlendRadius - 0.5f;
+            camp.Z = coord.y * ChunkSize + ((float)random.NextDouble() * 2f - 1f) * room;
+
+            float road = RoadCenterX(coord.x, camp.Z);
+            float side = road > centerX ? -1f : 1f;
+            camp.X = Mathf.Clamp(road + side * (RoadHalfWidth + CampRadius - 1f), centerX - room, centerX + room);
+            camp.Exists = true;
+        }
+
+        CampCache[coord] = camp;
+        return camp;
+    }
+
+    // 1 — внутри поляны, 0 — за полосой сглаживания. Положительна только у той стоянки,
+    // что лежит в этом же чанке, поэтому границы чанков никогда не рвут рельеф.
+    static float CampInfluence(float x, float z)
+    {
+        Camp camp = GetCamp(new Vector2Int(Mathf.RoundToInt(x / ChunkSize), Mathf.RoundToInt(z / ChunkSize)));
+        if (!camp.Exists)
+            return 0f;
+
+        float dx = x - camp.X;
+        float dz = z - camp.Z;
+        float squared = dx * dx + dz * dz;
+        if (squared >= CampBlendRadius * CampBlendRadius)
+            return 0f;
+        return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(CampBlendRadius, CampRadius, Mathf.Sqrt(squared)));
+    }
+
+    // 0 — сухо, 1 — самая глубокая яма. Глубина плавает вдоль дороги: на мелких участках
+    // машина едет почти свободно, а в ямах заметно теряет скорость.
     public static float MudDepth(float x, float z)
     {
         int column = Mathf.RoundToInt(x / ChunkSize);
@@ -240,6 +338,7 @@ public class OptimizedForestGenerator : MonoBehaviour
         int column = Mathf.RoundToInt(x / ChunkSize);
         float roadDistance = Mathf.Abs(x - RoadCenterX(column, z));
         float roughness = Mathf.Lerp(RoadRoughness, 1f, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(RoadHalfWidth, RoadHalfWidth * 2f, roadDistance)));
+        roughness = Mathf.Lerp(roughness, RoadRoughness, CampInfluence(x, z));
 
         return clearing * (hills + bumps * roughness);
     }
@@ -325,7 +424,15 @@ public class OptimizedForestGenerator : MonoBehaviour
 
     Chunk CreateChunk(Vector2Int coord)
     {
-        var chunk = new Chunk { Coord = coord, Trees = new Matrix4x4[MaxTreesPerChunk] };
+        var chunk = new Chunk
+        {
+            Coord = coord,
+            Trees = new Matrix4x4[MaxTreesPerChunk],
+            Crowns = new Matrix4x4[MaxTreesPerChunk],
+            DeadTrees = new Matrix4x4[MaxTreesPerChunk],
+            Rocks = new Matrix4x4[RocksPerChunk],
+            Ferns = new Matrix4x4[FernsPerChunk]
+        };
         GenerateHeights(chunk, out float minHeight, out float maxHeight);
 
         // Запас у деревьев: дерево за границей кадра всё ещё отбрасывает тень в кадр.
@@ -338,6 +445,7 @@ public class OptimizedForestGenerator : MonoBehaviour
             new Vector3(ChunkSize, grassTop - minHeight, ChunkSize));
 
         GenerateTrees(chunk);
+        GenerateGroundCover(chunk);
         return chunk;
     }
 
@@ -435,7 +543,11 @@ public class OptimizedForestGenerator : MonoBehaviour
                 float slopeZ = TerrainHeight(x, z + NormalSampleStep) - TerrainHeight(x, z - NormalSampleStep);
                 terrainNormals[index] = new Vector3(-slopeX, NormalSampleStep * 2f, -slopeZ).normalized;
 
-                terrainColors[index] = new Color32((byte)(MudDepth(x, z) * 255f), 0, 0, 255);
+                // Смещение считается от дороги своего столбца: на границе чанка оно не меняет знак,
+                // и при сглаживании между вершинами не возникает ложная дорога.
+                float bare = Mathf.Max(CampInfluence(x, z), IsInStartClearing(x, z) ? 1f : 0f);
+                terrainColors[index] = new Color32((byte)(MudDepth(x, z) * 255f), (byte)(bare * 255f), 0, 255);
+                terrainRoadOffsets[index] = new Vector2(x - RoadCenterX(chunk.Coord.x, z), 0f);
             }
         }
 
@@ -443,6 +555,8 @@ public class OptimizedForestGenerator : MonoBehaviour
         mesh.vertices = terrainVertices;
         mesh.normals = terrainNormals;
         mesh.colors32 = terrainColors;
+        mesh.uv = terrainRoadOffsets;
+        mesh.tangents = terrainTangents;
         if (mesh.GetIndexCount(0) == 0)
             mesh.triangles = terrainTriangles;
         mesh.RecalculateBounds();
@@ -490,6 +604,7 @@ public class OptimizedForestGenerator : MonoBehaviour
     void GenerateTrees(Chunk chunk)
     {
         var random = new System.Random(ChunkSeed(chunk.Coord, 1));
+        var deadRoll = new System.Random(ChunkSeed(chunk.Coord, 7));
         float cell = ChunkSize / TreeGridSide;
         float minX = (chunk.Coord.x - 0.5f) * ChunkSize;
         float minZ = (chunk.Coord.y - 0.5f) * ChunkSize;
@@ -512,10 +627,112 @@ public class OptimizedForestGenerator : MonoBehaviour
                     continue;
 
                 // Ствол немного утоплен: на склоне его основание не должно висеть над землёй.
-                chunk.Trees[chunk.TreeCount++] = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - TreeSink, z),
+                Matrix4x4 tree = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - TreeSink, z),
                     Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width));
+                chunk.Trees[chunk.TreeCount++] = tree;
+
+                // Коллайдеры и стволы общие; сухое дерево отличается лишь тем, что на нём сучья вместо кроны.
+                if (deadRoll.NextDouble() < DeadTreeChance)
+                    chunk.DeadTrees[chunk.DeadCount++] = tree;
+                else
+                    chunk.Crowns[chunk.CrownCount++] = tree;
             }
         }
+    }
+
+    // Камни и папоротник без коллайдеров: они слишком малы, чтобы мешать, а машина их просто подминает.
+    void GenerateGroundCover(Chunk chunk)
+    {
+        var random = new System.Random(ChunkSeed(chunk.Coord, 3));
+        float minX = (chunk.Coord.x - 0.5f) * ChunkSize;
+        float minZ = (chunk.Coord.y - 0.5f) * ChunkSize;
+
+        for (int i = 0; i < RocksPerChunk; i++)
+        {
+            float x = minX + (float)random.NextDouble() * ChunkSize;
+            float z = minZ + (float)random.NextDouble() * ChunkSize;
+            float size = Mathf.Lerp(0.2f, 0.75f, Mathf.Pow((float)random.NextDouble(), 2f));
+            float yaw = (float)random.NextDouble() * 360f;
+            if (IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)))
+                continue;
+            chunk.Rocks[chunk.RockCount++] = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - size * 0.12f, z),
+                Quaternion.Euler(0f, yaw, 0f), new Vector3(size * 1.2f, size * 0.8f, size));
+        }
+
+        for (int i = 0; i < FernsPerChunk; i++)
+        {
+            float x = minX + (float)random.NextDouble() * ChunkSize;
+            float z = minZ + (float)random.NextDouble() * ChunkSize;
+            float width = Mathf.Lerp(0.8f, 1.5f, (float)random.NextDouble());
+            float height = Mathf.Lerp(0.4f, 0.7f, (float)random.NextDouble());
+            float yaw = (float)random.NextDouble() * 360f;
+            if (Mathf.PerlinNoise(x * TreeDensityFrequency * 2f + NoiseOffset, z * TreeDensityFrequency * 2f) < FernNoiseMin)
+                continue;
+            if (IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)))
+                continue;
+            chunk.Ferns[chunk.FernCount++] = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - 0.03f, z),
+                Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width));
+        }
+    }
+
+    public void Track(Rigidbody body)
+    {
+        trackedBodies.Add(body);
+    }
+
+    // Стоянка собирается при первом приближении, а предметы рассыпаются один раз за игру:
+    // унесённое не должно появляться снова, когда игрок вернётся.
+    void AcquireCamp(Chunk chunk)
+    {
+        Camp camp = GetCamp(chunk.Coord);
+        if (!camp.Exists)
+            return;
+
+        float ground = TerrainHeight(camp.X, camp.Z);
+        var center = new Vector3(camp.X, ground, camp.Z);
+
+        if (campObjects.TryGetValue(chunk.Coord, out GameObject campObject))
+        {
+            campObject.SetActive(true);
+        }
+        else
+        {
+            campObject = ProceduralModels.BuildCamp(center, ground, new System.Random(ChunkSeed(chunk.Coord, 5)));
+            campObject.transform.SetParent(transform, true);
+            campObjects[chunk.Coord] = campObject;
+        }
+
+        if (!VisitedCamps.Contains(chunk.Coord))
+        {
+            VisitedCamps.Add(chunk.Coord);
+            SpawnCampLoot(chunk.Coord, center);
+        }
+    }
+
+    void SpawnCampLoot(Vector2Int coord, Vector3 center)
+    {
+        var random = new System.Random(ChunkSeed(coord, 6));
+        int count = random.Next(CampLootMin, CampLootMax + 1);
+        for (int i = 0; i < count; i++)
+        {
+            float angle = (float)random.NextDouble() * Mathf.PI * 2f;
+            float distance = Mathf.Lerp(CampLootMinDistance, CampLootMaxDistance, (float)random.NextDouble());
+            float x = center.x + Mathf.Cos(angle) * distance;
+            float z = center.z + Mathf.Sin(angle) * distance;
+            string kind = random.NextDouble() < 0.5 ? ProceduralModels.JerrycanKind : ProceduralModels.BatteryKind;
+            string lootName = ProceduralModels.LootPrefix + kind + "_" + coord.x + "_" + coord.y + "_" + i;
+
+            // Канистра лежит на боку или стоит: разбросано как попало, а не выставлено.
+            Quaternion rotation = Quaternion.Euler(random.Next(2) * 90f, (float)random.NextDouble() * 360f, 0f);
+            var position = new Vector3(x, TerrainHeight(x, z) + CampLootDropHeight, z);
+            Track(ProceduralModels.CreateLoot(lootName, position, rotation).GetComponent<Rigidbody>());
+        }
+    }
+
+    void ReleaseCamp(Chunk chunk)
+    {
+        if (campObjects.TryGetValue(chunk.Coord, out GameObject campObject))
+            campObject.SetActive(false);
     }
 
     void AcquireNearContent(Chunk chunk)
@@ -525,6 +742,7 @@ public class OptimizedForestGenerator : MonoBehaviour
             for (int i = 0; i < chunk.TreeCount; i++)
                 chunk.Colliders.Add(PlaceTreeCollider(chunk.Trees[i]));
             ActivePhysicalTrees += chunk.TreeCount;
+            AcquireCamp(chunk);
         }
 
         if (chunk.GrassCount == 0 && !chunk.GrassPending)
@@ -536,6 +754,9 @@ public class OptimizedForestGenerator : MonoBehaviour
 
     void ReleaseNearContent(Chunk chunk)
     {
+        if (chunk.Colliders.Count > 0)
+            ReleaseCamp(chunk);
+
         foreach (CapsuleCollider tree in chunk.Colliders)
         {
             tree.gameObject.SetActive(false);
@@ -656,7 +877,14 @@ public class OptimizedForestGenerator : MonoBehaviour
             if (chunk.TreeCount > 0 && GeometryUtility.TestPlanesAABB(frustumPlanes, chunk.TreeBounds))
             {
                 Graphics.DrawMeshInstanced(trunkMesh, 0, trunkMaterial, chunk.Trees, chunk.TreeCount, null, ShadowCastingMode.On, true);
-                Graphics.DrawMeshInstanced(crownMesh, 0, crownMaterial, chunk.Trees, chunk.TreeCount, null, ShadowCastingMode.On, true);
+                if (chunk.CrownCount > 0)
+                    Graphics.DrawMeshInstanced(crownMesh, 0, crownMaterial, chunk.Crowns, chunk.CrownCount, null, ShadowCastingMode.On, true);
+                if (chunk.DeadCount > 0)
+                    Graphics.DrawMeshInstanced(branchMesh, 0, deadMaterial, chunk.DeadTrees, chunk.DeadCount, null, ShadowCastingMode.On, true);
+                if (chunk.RockCount > 0)
+                    Graphics.DrawMeshInstanced(rockMesh, 0, rockMaterial, chunk.Rocks, chunk.RockCount, null, ShadowCastingMode.On, true);
+                if (chunk.FernCount > 0 && ChunkDistance(chunk.Coord, centerChunk) <= NearRadius)
+                    Graphics.DrawMeshInstanced(fernMesh, 0, fernMaterial, chunk.Ferns, chunk.FernCount, null, ShadowCastingMode.Off, true);
                 treeChunksDrawn++;
             }
 

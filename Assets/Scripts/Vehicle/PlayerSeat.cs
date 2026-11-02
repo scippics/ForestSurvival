@@ -33,14 +33,14 @@ public class PlayerSeat : MonoBehaviour
     void Update()
     {
         if (IsSeated)
-            Vehicle.SetDriverInput(Input.Move, Input.BrakeHeld);
+            Vehicle.SetDriverInput(Input.Move);
     }
 
     void FixedUpdate()
     {
-        bool lowGearPressed = Input.ConsumeLowGear();
-        if (IsSeated && lowGearPressed)
-            Vehicle.isLowGear = !Vehicle.isLowGear;
+        // Ручник защёлкивается и остаётся после выхода: машину можно оставить на склоне.
+        if (IsSeated && Input.ConsumeSpace())
+            Vehicle.HandbrakeOn = !Vehicle.HandbrakeOn;
 
         bool headlightsPressed = Input.ConsumeHeadlights();
         if (IsSeated && headlightsPressed)
@@ -90,7 +90,7 @@ public class PlayerSeat : MonoBehaviour
             return;
 
         Rigidbody vehicleBody = Vehicle.GetComponent<Rigidbody>();
-        Vehicle.SetDriverInput(Vector2.zero, false);
+        Vehicle.SetDriverInput(Vector2.zero);
         Vehicle.Driver = null;
 
         view.ExitSeat(Vehicle.transform.eulerAngles.y);

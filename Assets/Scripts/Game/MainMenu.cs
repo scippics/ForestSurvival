@@ -171,7 +171,7 @@ public class MainMenu : MonoBehaviour
         Place(savedMessage.rectTransform, 146f, 350f, 800f, 40f);
 
         Text controls = CreateText(pausePanel.transform, "Controls",
-            "WASD - идти или ехать     ЛКМ / ПКМ - взять, бросить     E - машина     F - толкать\nT - фонарик     L - фары     G - пониженная     R - поставить на колёса     Tab - блокнот",
+            "WASD - идти или ехать     Пробел - прыжок, ручник     ЛКМ / ПКМ - взять, бросить     E - машина     F - толкать\nT - фонарик     L - фары     R - поставить на колёса     Tab - блокнот",
             22, HintColor, FontStyle.Normal);
         Place(controls.rectTransform, 146f, 70f, 1500f, 80f);
 

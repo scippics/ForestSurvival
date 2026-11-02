@@ -10,9 +10,7 @@ public class InteractionUI : MonoBehaviour
     const string PromptHolding = "ЛКМ - Отпустить, ПКМ - Бросить";
     const string PromptPressure = "Отпустить на 75-95. Давление: ";
     const string PromptEnter = "E - Сесть за руль";
-    const string PromptDriving = "E - Выйти, G - Пониженная: ";
-    const string PromptHeadlights = ", L - Фары";
-    const string PromptBogged = "Застряли в грязи! G - Пониженная\n";
+    const string PromptDriving = "E - Выйти, L - Фары, Пробел - Ручник: ";
     const string PromptOverturned = "Машина перевернулась! R - Поставить на колёса\n";
 
     const int ReferenceHeight = 1080;
@@ -114,10 +112,8 @@ public class InteractionUI : MonoBehaviour
     {
         if (seat.IsSeated)
         {
-            string driving = PromptDriving + (seat.Vehicle.isLowGear ? "вкл" : "выкл") + PromptHeadlights;
-            if (seat.Vehicle.IsOverturned)
-                return PromptOverturned + driving;
-            return seat.Vehicle.IsBogged ? PromptBogged + driving : driving;
+            string driving = PromptDriving + (seat.Vehicle.HandbrakeOn ? "вкл" : "выкл");
+            return seat.Vehicle.IsOverturned ? PromptOverturned + driving : driving;
         }
 
         if (hands.HeldSiphon != null && hands.HeldSiphon.IsPumping)
