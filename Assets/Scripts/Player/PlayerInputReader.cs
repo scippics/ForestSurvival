@@ -13,8 +13,8 @@ public class PlayerInputReader : MonoBehaviour
     public bool BrakeHeld { get; private set; }
 
     InputActionMap map;
-    InputAction move, look, grab, throwItem, push, interact, lowGear, brake, notebook, flashlight, headlights, cancel;
-    bool grabLatched, throwLatched, interactLatched, lowGearLatched, notebookLatched, flashlightLatched, headlightsLatched;
+    InputAction move, look, grab, throwItem, push, interact, lowGear, brake, notebook, flashlight, headlights, recover, cancel;
+    bool grabLatched, throwLatched, interactLatched, lowGearLatched, notebookLatched, flashlightLatched, headlightsLatched, recoverLatched;
 
     void Awake()
     {
@@ -37,10 +37,10 @@ public class PlayerInputReader : MonoBehaviour
         notebook = map.AddAction("Notebook", InputActionType.Button, "<Keyboard>/tab");
         flashlight = map.AddAction("Flashlight", InputActionType.Button, "<Keyboard>/t");
         headlights = map.AddAction("Headlights", InputActionType.Button, "<Keyboard>/l");
+        recover = map.AddAction("Recover", InputActionType.Button, "<Keyboard>/r");
         cancel = map.AddAction("Cancel", InputActionType.Button, "<Keyboard>/escape");
 
         map.Enable();
-        SetCursorLocked(true);
     }
 
     void OnDestroy()
@@ -51,18 +51,15 @@ public class PlayerInputReader : MonoBehaviour
     void Update()
     {
         if (cancel.WasPressedThisFrame())
-            SetCursorLocked(false);
+            GameFlow.TogglePause();
 
-        if (Cursor.lockState != CursorLockMode.Locked)
+        if (GameFlow.State != GameState.Playing)
         {
             Move = Vector2.zero;
             LookDelta = Vector2.zero;
             GrabHeld = false;
             PushHeld = false;
             BrakeHeld = false;
-            // Клик, возвращающий курсор в игру, не должен заодно хватать предмет.
-            if (grab.WasPressedThisFrame())
-                SetCursorLocked(true);
             return;
         }
 
@@ -81,6 +78,14 @@ public class PlayerInputReader : MonoBehaviour
         notebookLatched |= notebook.WasPressedThisFrame();
         flashlightLatched |= flashlight.WasPressedThisFrame();
         headlightsLatched |= headlights.WasPressedThisFrame();
+        recoverLatched |= recover.WasPressedThisFrame();
+    }
+
+    public bool ConsumeRecover()
+    {
+        bool pressed = recoverLatched;
+        recoverLatched = false;
+        return pressed;
     }
 
     public bool ConsumeFlashlight()
@@ -132,9 +137,4 @@ public class PlayerInputReader : MonoBehaviour
         return pressed;
     }
 
-    static void SetCursorLocked(bool locked)
-    {
-        Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
-        Cursor.visible = !locked;
-    }
 }

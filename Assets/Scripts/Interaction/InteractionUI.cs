@@ -12,6 +12,8 @@ public class InteractionUI : MonoBehaviour
     const string PromptEnter = "E - Сесть за руль";
     const string PromptDriving = "E - Выйти, G - Пониженная: ";
     const string PromptHeadlights = ", L - Фары";
+    const string PromptBogged = "Застряли в грязи! G - Пониженная\n";
+    const string PromptOverturned = "Машина перевернулась! R - Поставить на колёса\n";
 
     const int ReferenceHeight = 1080;
     const float PromptOffset = 24f;
@@ -80,6 +82,13 @@ public class InteractionUI : MonoBehaviour
 
     void Update()
     {
+        if (GameFlow.State != GameState.Playing)
+        {
+            dot.enabled = false;
+            CurrentPrompt = "";
+            return;
+        }
+
         bool aimed = InteractionRay.Cast(transform, out RaycastHit hit);
         CurrentPrompt = ResolvePrompt(aimed, hit);
 
@@ -104,7 +113,12 @@ public class InteractionUI : MonoBehaviour
     string ResolvePrompt(bool aimed, RaycastHit hit)
     {
         if (seat.IsSeated)
-            return PromptDriving + (seat.Vehicle.isLowGear ? "вкл" : "выкл") + PromptHeadlights;
+        {
+            string driving = PromptDriving + (seat.Vehicle.isLowGear ? "вкл" : "выкл") + PromptHeadlights;
+            if (seat.Vehicle.IsOverturned)
+                return PromptOverturned + driving;
+            return seat.Vehicle.IsBogged ? PromptBogged + driving : driving;
+        }
 
         if (hands.HeldSiphon != null && hands.HeldSiphon.IsPumping)
             return PromptPressure + Mathf.FloorToInt(hands.HeldSiphon.SiphonPressure);
@@ -142,7 +156,7 @@ public class InteractionUI : MonoBehaviour
         if (seat.IsSeated)
         {
             float margin = DrivingPromptMargin * scale;
-            float height = DrivingPromptSize * 2f * scale;
+            float height = DrivingPromptSize * 4f * scale;
             promptStyle.alignment = TextAnchor.LowerLeft;
             promptStyle.fontSize = Mathf.RoundToInt(DrivingPromptSize * scale);
             area = new Rect(margin, Screen.height - height - margin, Screen.width - margin * 2f, height);

@@ -92,6 +92,20 @@ public class PlayerCamera : MonoBehaviour
         Pitch = 0f;
     }
 
+    public void SetLook(float yaw, float pitch)
+    {
+        Yaw = yaw;
+        Pitch = pitch;
+        transform.localRotation = Quaternion.Euler(Pitch, Yaw, 0f);
+    }
+
+    // Меню водит камеру само; перед игрой она возвращается в голову игрока.
+    public void ResetToBody()
+    {
+        transform.localPosition = restPosition;
+        transform.localRotation = Quaternion.Euler(Pitch, Yaw, 0f);
+    }
+
     public void ExitSeat(float vehicleYaw)
     {
         IsSeated = false;

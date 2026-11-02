@@ -51,8 +51,8 @@ public class OptimizedForestGenerator : MonoBehaviour
 
     const float MudFrequency = 0.07f;
     const float MudDepthMin = 0.4f;
-    const float MudNoiseMin = 0.3f;
-    const float MudNoiseMax = 0.7f;
+    const float MudNoiseMin = 0.35f;
+    const float MudNoiseMax = 0.82f;
 
     const float StartClearingRadius = 30f;
 
@@ -139,6 +139,16 @@ public class OptimizedForestGenerator : MonoBehaviour
             GenerateNextTerrain();
         while (pendingGrass.Count > 0)
             GenerateNextGrass();
+    }
+
+    // После телепорта (загрузка, выход из меню) земля нужна сразу, а не в следующем кадре.
+    public void RefreshNow()
+    {
+        Physics.SyncTransforms();
+        centerChunk = WorldToChunk(Camera.main.transform.position);
+        RefreshChunks();
+        UpdateTrackedBodies();
+        Physics.SyncTransforms();
     }
 
     static Material CreateFoliageMaterial(Color color, float windStrength, float flutterStrength)

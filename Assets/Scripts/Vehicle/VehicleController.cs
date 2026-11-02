@@ -24,7 +24,14 @@ public class VehicleController : MonoBehaviour
     const float MudForwardStiffness = 0.3f;
     const float MudForwardStiffnessLowGear = 0.7f;
     const float MudSidewaysStiffness = 0.5f;
-    const float LowGearMaxSlip = 0.9f;
+    const float LowGearMaxSlip = 1.5f;
+    const float GripMargin = 0.9f;
+    const float OverspinBrakeTorque = 600f;
+    const float AntiRollStiffness = 9000f;
+    const float OverturnedUpDot = 0.5f;
+    const float RecoverHeight = 1.5f;
+    const float BoggedDepth = 0.5f;
+    const float BoggedSpeed = 1f;
     const float MudResistanceBase = 6500f;
     const float MudResistancePerSpeed = 300f;
     const float StiffnessEpsilon = 0.01f;
@@ -33,6 +40,8 @@ public class VehicleController : MonoBehaviour
 
     public bool LightsOn { get; private set; }
     public float CurrentMudDepth { get; private set; }
+    public bool IsOverturned => Vector3.Dot(transform.up, Vector3.up) < OverturnedUpDot;
+    public bool IsBogged => !isLowGear && throttle != 0f && CurrentMudDepth > BoggedDepth && Mathf.Abs(ForwardSpeed) < BoggedSpeed;
     public PlayerSeat Driver { get; set; }
     public Transform DriverSeat { get; set; }
     public Transform PassengerSeat { get; set; }
@@ -145,12 +154,54 @@ public class VehicleController : MonoBehaviour
         body.AddForce(-velocity / speed * resistance, ForceMode.Force);
     }
 
-    // Сорванное колесо теряет сцепление, поэтому пониженная не даёт ему обгонять машину:
-    // весь её большой момент уходит в тягу, а не в раскрутку.
-    static float LimitSlip(WheelCollider wheel, float motor, float bodySpeed)
+    // Сорванное колесо теряет сцепление, поэтому пониженная отдаёт не больше момента, чем колесо
+    // может передать на землю: так он весь уходит в тягу, а не в раскрутку.
+    static float LimitToGrip(WheelCollider wheel, float motor)
     {
-        float wheelSpeed = Mathf.Abs(wheel.rpm) * Mathf.PI * 2f * wheel.radius / 60f;
-        return motor * Mathf.Clamp01(1f - (wheelSpeed - bodySpeed) / LowGearMaxSlip);
+        if (!wheel.GetGroundHit(out WheelHit hit))
+            return 0f;
+
+        float grip = wheel.forwardFriction.stiffness * hit.force * wheel.radius * GripMargin;
+        return Mathf.Clamp(motor, -grip, grip);
+    }
+
+    // Стабилизатор поперечной устойчивости: разница в ходе подвески одной оси
+    // прижимает приподнятую сторону, и машина кренится меньше.
+    void ApplyAntiRoll()
+    {
+        for (int i = 0; i + 1 < wheels.Count; i += 2)
+        {
+            WheelCollider left = wheels[i].Collider;
+            WheelCollider right = wheels[i + 1].Collider;
+            float force = (SuspensionTravel(left) - SuspensionTravel(right)) * AntiRollStiffness;
+            if (left.isGrounded)
+                body.AddForceAtPosition(left.transform.up * -force, left.transform.position);
+            if (right.isGrounded)
+                body.AddForceAtPosition(right.transform.up * force, right.transform.position);
+        }
+    }
+
+    static float SuspensionTravel(WheelCollider wheel)
+    {
+        if (!wheel.GetGroundHit(out WheelHit hit))
+            return 1f;
+        return (-wheel.transform.InverseTransformPoint(hit.point).y - wheel.radius) / wheel.suspensionDistance;
+    }
+
+    // Лежащую машину одному не поднять, поэтому она ставится на колёса на том же месте.
+    public void RecoverUpright()
+    {
+        Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+        if (forward.sqrMagnitude < 0.01f)
+            forward = Vector3.ProjectOnPlane(transform.up, Vector3.up);
+
+        Vector3 position = body.position;
+        position.y = OptimizedForestGenerator.TerrainHeight(position.x, position.z) + RecoverHeight;
+        body.position = position;
+        body.rotation = Quaternion.LookRotation(forward, Vector3.up);
+        transform.SetPositionAndRotation(position, body.rotation);
+        body.linearVelocity = Vector3.zero;
+        body.angularVelocity = Vector3.zero;
     }
 
     static void SetStiffness(WheelCollider wheel, float forward, float sideways)
@@ -173,6 +224,7 @@ public class VehicleController : MonoBehaviour
     void FixedUpdate()
     {
         ApplyMud();
+        ApplyAntiRoll();
 
         float speed = ForwardSpeed;
         float absSpeed = Mathf.Abs(speed);
@@ -204,8 +256,24 @@ public class VehicleController : MonoBehaviour
 
         foreach (Wheel wheel in wheels)
         {
-            wheel.Collider.motorTorque = isLowGear ? LimitSlip(wheel.Collider, motor, absSpeed) : motor;
-            wheel.Collider.brakeTorque = brake;
+            float wheelSpeed = Mathf.Abs(wheel.Collider.rpm) * Mathf.PI * 2f * wheel.Collider.radius / 60f;
+            float wheelMotor = wheelSpeed > limit ? 0f : motor;
+            float wheelBrake = brake;
+            if (isLowGear)
+            {
+                wheelMotor = LimitToGrip(wheel.Collider, wheelMotor);
+
+                // Колесо, раскрученное ещё на обычной передаче, само не остановится:
+                // пока оно буксует, тяги нет, поэтому пониженная сначала его притормаживает.
+                if (wheelSpeed - absSpeed > LowGearMaxSlip)
+                {
+                    wheelMotor = 0f;
+                    wheelBrake = Mathf.Max(wheelBrake, OverspinBrakeTorque);
+                }
+            }
+
+            wheel.Collider.motorTorque = wheelMotor;
+            wheel.Collider.brakeTorque = wheelBrake;
             if (wheel.IsFront)
                 wheel.Collider.steerAngle = currentSteer;
         }

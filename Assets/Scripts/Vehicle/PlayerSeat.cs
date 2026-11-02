@@ -46,6 +46,10 @@ public class PlayerSeat : MonoBehaviour
         if (IsSeated && headlightsPressed)
             Vehicle.SetLights(!Vehicle.LightsOn);
 
+        bool recoverPressed = Input.ConsumeRecover();
+        if (IsSeated && recoverPressed && Vehicle.IsOverturned)
+            Vehicle.RecoverUpright();
+
         if (!Input.ConsumeInteract())
             return;
 
@@ -55,7 +59,7 @@ public class PlayerSeat : MonoBehaviour
             Enter(target);
     }
 
-    void Enter(VehicleController target)
+    public void Enter(VehicleController target)
     {
         hands.ReleaseHeld();
         hands.enabled = false;

@@ -43,6 +43,7 @@ public static class RuntimeBootstrapper
 
         // Последним: рельеф создаётся сразу и запоминает всё, что нужно удерживать на земле.
         new GameObject("Forest").AddComponent<OptimizedForestGenerator>();
+        new GameObject("MainMenu").AddComponent<MainMenu>();
     }
 
     static void BuildEnvironment()
