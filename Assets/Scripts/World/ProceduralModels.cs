@@ -8,6 +8,8 @@ public static class ProceduralModels
     public const string LootPrefix = "Loot_";
     public const string JerrycanKind = "Jerrycan";
     public const string BatteryKind = "Battery";
+    public const string MannequinName = "Mannequin";
+    public const string MannequinHeadName = "Head";
 
     const float JerrycanMass = 18f;
     const float BatteryMass = 14f;
@@ -33,6 +35,17 @@ public static class ProceduralModels
     static readonly Color PaperColor = new Color(0.8f, 0.78f, 0.65f);
     static readonly Color InkColor = new Color(0.14f, 0.25f, 0.5f);
     static readonly Color DrumColor = new Color(0.3f, 0.25f, 0.08f);
+    static readonly Color SkinColor = new Color(0.62f, 0.47f, 0.38f);
+    static readonly Color TrousersColor = new Color(0.1f, 0.11f, 0.13f);
+    static readonly Color BootColor = new Color(0.05f, 0.04f, 0.035f);
+    static readonly Color BotJacketColor = new Color(0.8f, 0.36f, 0.06f);
+    static readonly Color[] JacketColors =
+    {
+        new Color(0.2f, 0.27f, 0.17f),
+        new Color(0.45f, 0.13f, 0.1f),
+        new Color(0.13f, 0.25f, 0.42f),
+        new Color(0.42f, 0.34f, 0.12f)
+    };
 
     static readonly Dictionary<(Color, float, float, float), Material> Materials = new Dictionary<(Color, float, float, float), Material>();
     static Shader litShader;
@@ -170,6 +183,58 @@ public static class ProceduralModels
             Part(t, "DrumRim", PrimitiveType.Cylinder, new Vector3(spot.x, 0.72f, spot.y), new Vector3(0.93f, 0.03f, 0.93f), Lit(CapColor));
         }
         return root;
+    }
+
+    // Манекен игрока. Деталь вращается вместе с Mannequin (поворот тела), а голова — ещё и вокруг шеи.
+    // Центр капсулы игрока на высоте 0.9 м над землёй, поэтому ноги уходят вниз от корня.
+    public static void BuildMannequin(Transform player)
+    {
+        var body = new GameObject(MannequinName).transform;
+        body.SetParent(player, false);
+
+        var head = new GameObject(MannequinHeadName).transform;
+        head.SetParent(body, false);
+        head.localPosition = new Vector3(0f, 0.55f, 0f);
+
+        Material skin = Lit(SkinColor);
+        Material trousers = Lit(TrousersColor);
+        Material boots = Lit(BootColor);
+        Material jacket = CreateLit(BotJacketColor);
+
+        Part(body, "Torso", PrimitiveType.Capsule, new Vector3(0f, 0.17f, 0f), new Vector3(0.46f, 0.36f, 0.28f), jacket);
+        Part(body, "Neck", PrimitiveType.Cylinder, new Vector3(0f, 0.52f, 0f), new Vector3(0.1f, 0.05f, 0.1f), skin);
+        Part(head, "Skull", PrimitiveType.Sphere, new Vector3(0f, 0.13f, 0f), new Vector3(0.24f, 0.27f, 0.25f), skin);
+        Part(head, "Cap", PrimitiveType.Sphere, new Vector3(0f, 0.2f, -0.01f), new Vector3(0.26f, 0.16f, 0.27f), jacket);
+        Part(head, "Visor", PrimitiveType.Cube, new Vector3(0f, 0.2f, 0.14f), new Vector3(0.2f, 0.02f, 0.11f), jacket);
+        foreach (float side in new[] { -1f, 1f })
+        {
+            Part(head, "Eye", PrimitiveType.Sphere, new Vector3(side * 0.05f, 0.13f, 0.115f), Vector3.one * 0.03f, boots);
+
+            // Руки чуть вынесены вперёд: сразу видно, куда развёрнут игрок.
+            Part(body, "Shoulder", PrimitiveType.Sphere, new Vector3(side * 0.27f, 0.36f, 0f), Vector3.one * 0.14f, jacket);
+            Part(body, "UpperArm", PrimitiveType.Cylinder, new Vector3(side * 0.29f, 0.17f, 0.03f), new Vector3(0.1f, 0.19f, 0.1f), jacket, Quaternion.Euler(-9f, 0f, side * 4f));
+            Part(body, "Forearm", PrimitiveType.Cylinder, new Vector3(side * 0.3f, -0.08f, 0.14f), new Vector3(0.085f, 0.16f, 0.085f), jacket, Quaternion.Euler(-40f, 0f, 0f));
+            Part(body, "Hand", PrimitiveType.Sphere, new Vector3(side * 0.3f, -0.21f, 0.25f), Vector3.one * 0.09f, skin);
+
+            Part(body, "Thigh", PrimitiveType.Cylinder, new Vector3(side * 0.12f, -0.33f, 0f), new Vector3(0.15f, 0.21f, 0.15f), trousers);
+            Part(body, "Shin", PrimitiveType.Cylinder, new Vector3(side * 0.12f, -0.67f, 0f), new Vector3(0.12f, 0.17f, 0.12f), trousers);
+            Part(body, "Boot", PrimitiveType.Cube, new Vector3(side * 0.12f, -0.85f, 0.05f), new Vector3(0.14f, 0.1f, 0.28f), boots);
+        }
+    }
+
+    // Куртка у каждого игрока своя, у бота сигнальная: так их проще различить в лесу.
+    public static void PaintMannequin(Transform mannequin, ulong clientId)
+    {
+        Color color = clientId == ulong.MaxValue ? BotJacketColor : JacketColors[(int)(clientId % (ulong)JacketColors.Length)];
+        Material jacket = null;
+        foreach (Renderer part in mannequin.GetComponentsInChildren<Renderer>())
+        {
+            if (part.sharedMaterial.color != BotJacketColor)
+                continue;
+            if (jacket == null)
+                jacket = CreateLit(color);
+            part.sharedMaterial = jacket;
+        }
     }
 
     public static GameObject CreateLoot(string name, Vector3 position, Quaternion rotation)

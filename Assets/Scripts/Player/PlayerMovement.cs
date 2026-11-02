@@ -1,7 +1,9 @@
+using Unity.Netcode;
 using UnityEngine;
 
+// На шаблоне игрока, поэтому есть и у чужих тел, и у бота; управляет только своим.
 [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
-public class PlayerMovement : MonoBehaviour
+public class PlayerMovement : NetworkBehaviour
 {
     const float WalkSpeed = 4.5f;
     const float BurdenedSpeedFactor = 0.7f;
@@ -42,8 +44,6 @@ public class PlayerMovement : MonoBehaviour
 
     void Awake()
     {
-        input = GetComponent<PlayerInputReader>();
-        view = GetComponentInChildren<PlayerCamera>();
         body = GetComponent<Rigidbody>();
         capsule = GetComponent<CapsuleCollider>();
 
@@ -61,14 +61,22 @@ public class PlayerMovement : MonoBehaviour
         };
     }
 
-    // Руки создаются позже движения, поэтому их нельзя получить в Awake.
-    void Start()
+    // Ввод, камера и руки собираются при появлении в сети и только у своего игрока.
+    void BindLocalRig()
     {
+        input = GetComponent<PlayerInputReader>();
+        view = GetComponentInChildren<PlayerCamera>();
         hands = GetComponent<PlayerHands>();
     }
 
     void FixedUpdate()
     {
+        // IsOwner мало: бот принадлежит серверу, как и игрок на хосте.
+        if (!IsSpawned || !IsOwner || !NetworkObject.IsPlayerObject)
+            return;
+        if (input == null)
+            BindLocalRig();
+
         UpdateGround();
         TryJump();
 

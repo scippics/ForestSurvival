@@ -11,6 +11,7 @@ public static class RuntimeBootstrapper
     const float FogDensity = 0.042f;
     const float VisibleDistance = 45f;
     const float CameraFarClip = 90f;
+    static readonly Vector3 PlayerStart = new Vector3(0f, 1f, -4f);
     const float HeadlightBeamLength = 22f;
     const float HeadlightBeamStrength = 0.1f;
 
@@ -43,11 +44,20 @@ public static class RuntimeBootstrapper
         BuildTestGround();
         BuildItems();
         BuildVehicle(new Vector3(5f, 1.2f, 0f));
-        BuildPlayer(new Vector3(0f, 1f, -4f));
 
-        // Последним: рельеф создаётся сразу и запоминает всё, что нужно удерживать на земле.
+        // Лес и меню строятся, когда появится свой игрок: у хоста сразу, у клиента после подключения.
+        NetworkBootstrap.Start(CreatePlayerPrefab());
+    }
+
+    // Последним: рельеф создаётся сразу и запоминает всё, что нужно удерживать на земле.
+    public static void OnLocalPlayerReady()
+    {
         new GameObject("Forest").AddComponent<OptimizedForestGenerator>();
         new GameObject("Atmosphere").AddComponent<ForestAtmosphere>();
+
+        if (Unity.Netcode.NetworkManager.Singleton.IsServer)
+            DummyBotSpawner.Spawn(NetworkBootstrap.PlayerPrefab);
+
         new GameObject("MainMenu").AddComponent<MainMenu>();
     }
 
@@ -326,11 +336,14 @@ public static class RuntimeBootstrapper
         controller.AddWheel(wheel, visual, isFront);
     }
 
-    static void BuildPlayer(Vector3 position)
+    // Шаблон игрока: всё, что должно быть одинаковым у своего, чужого и бота. Выключен, поэтому
+    // сам не участвует в игре, а настоящие тела из него создаёт Netcode.
+    static GameObject CreatePlayerPrefab()
     {
         var player = new GameObject("Player");
+        player.SetActive(false);
         player.layer = InteractionRay.IgnoreRaycastLayer;
-        player.transform.position = position;
+        Object.DontDestroyOnLoad(player);
 
         var capsule = player.AddComponent<CapsuleCollider>();
         capsule.height = 1.8f;
@@ -339,6 +352,29 @@ public static class RuntimeBootstrapper
         var body = player.AddComponent<Rigidbody>();
         body.mass = 80f;
 
+        // В машине игрок становится дочерним объектом кузова, а кузов пока не сетевой.
+        player.AddComponent<Unity.Netcode.NetworkObject>().AutoObjectParentSync = false;
+
+        var networkTransform = player.AddComponent<OwnerNetworkTransform>();
+        networkTransform.SyncRotAngleX = false;
+        networkTransform.SyncRotAngleY = false;
+        networkTransform.SyncRotAngleZ = false;
+        networkTransform.SyncScaleX = false;
+        networkTransform.SyncScaleY = false;
+        networkTransform.SyncScaleZ = false;
+        networkTransform.Interpolate = true;
+
+        ProceduralModels.BuildMannequin(player.transform);
+        player.AddComponent<PlayerMovement>();
+        player.AddComponent<PlayerAvatar>();
+        return player;
+    }
+
+    // Только для своего игрока: камера, ввод, руки и интерфейс.
+    public static void BuildLocalRig(GameObject player)
+    {
+        player.name = "LocalPlayer";
+        player.transform.position = PlayerStart;
         player.AddComponent<PlayerInputReader>();
 
         var cameraObject = new GameObject("PlayerCamera");
@@ -358,7 +394,6 @@ public static class RuntimeBootstrapper
         hold.transform.SetParent(cameraObject.transform, false);
         hold.transform.localPosition = new Vector3(0f, -0.25f, 1.2f);
 
-        player.AddComponent<PlayerMovement>();
         player.AddComponent<BlueprintNotebook>();
         player.AddComponent<PlayerHands>();
         player.AddComponent<PlayerSeat>();
