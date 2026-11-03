@@ -11,6 +11,7 @@ public static class ProceduralModels
     public const string JerrycanKind = "Jerrycan";
     public const string BatteryKind = "Battery";
     public const string CellsKind = "Cells";
+    public const string KitKind = "Kit";
     public const string MannequinName = "Mannequin";
     public const string MannequinHeadName = "Head";
 
@@ -20,6 +21,7 @@ public static class ProceduralModels
     const float HoseMass = 2f;
     const float BlueprintMass = 0.1f;
     const float CellsMass = 0.15f;
+    const float KitMass = 8f;
 
     static readonly Color PlankColor = new Color(0.27f, 0.22f, 0.17f);
     static readonly Color OldPlankColor = new Color(0.25f, 0.2f, 0.15f);
@@ -146,6 +148,22 @@ public static class ProceduralModels
         for (int i = 0; i < 6; i++)
             Part(t, "CellCap", PrimitiveType.Cylinder, new Vector3(-0.1f + i * 0.04f, 0.122f, 0.055f), new Vector3(0.024f, 0.006f, 0.024f), Lit(CapColor));
         Part(t, "CarryStrap", PrimitiveType.Cube, new Vector3(0f, 0.13f, -0.05f), new Vector3(0.17f, 0.008f, 0.025f), Lit(CapColor));
+        root.AddComponent<CarBatteryItem>();
+        return root;
+    }
+
+    // Ящик с ключами и проволокой: один раз чинит машину.
+    public static GameObject CreateKit(string name, Vector3 position, Quaternion rotation)
+    {
+        GameObject root = CreateItemRoot(name, position, rotation, KitMass);
+        Transform t = root.transform;
+        Material paint = Lit(new Color(0.09f, 0.16f, 0.26f), 0f, 0f, 0.3f, CarPartModels.SurfaceRust);
+        Part(t, "KitBox", PrimitiveType.Cube, Vector3.zero, new Vector3(0.42f, 0.17f, 0.2f), paint, null, true);
+        Part(t, "KitLid", PrimitiveType.Cube, new Vector3(0f, 0.095f, 0f), new Vector3(0.43f, 0.03f, 0.21f), paint);
+        Part(t, "KitHandle", PrimitiveType.Cube, new Vector3(0f, 0.135f, 0f), new Vector3(0.14f, 0.022f, 0.03f), Lit(CapColor));
+        foreach (float x in new[] { -0.15f, 0.15f })
+            Part(t, "KitLatch", PrimitiveType.Cube, new Vector3(x, 0.06f, 0.104f), new Vector3(0.04f, 0.05f, 0.012f), Lit(TerminalMinusColor, 0f, 0f, 0.5f));
+        root.AddComponent<RepairKit>();
         return root;
     }
 
@@ -272,6 +290,8 @@ public static class ProceduralModels
     {
         if (name.StartsWith(LootPrefix + CellsKind))
             return CreateCells(name, position, rotation);
+        if (name.StartsWith(LootPrefix + KitKind))
+            return CreateKit(name, position, rotation);
         return name.StartsWith(LootPrefix + BatteryKind)
             ? CreateBattery(name, position, rotation)
             : CreateJerrycan(name, position, rotation);

@@ -22,7 +22,18 @@ public class PlayerSeat : MonoBehaviour
     const float RoadShakeFrequency = 17f;
     const float PourLitersPerSecond = 4f;
     public const float PourReach = 2.8f;
+    const float CrankMinSeconds = 0.7f;
+    const float CrankMaxSeconds = 1.9f;
+    const float CrankDrainPerSecond = 0.035f;
+    const float CrankChurnPeriod = 0.24f;
+    const float DeadBattery = 0.08f;
+    const float NightCrankFactor = 1.35f;
+    const float WornCrankFactor = 2f;
 
+    float crankTime;
+    float crankNeed;
+    float nextChurn;
+    bool crankFailed;
     FuelCan pouringCan;
     VehicleController pouringInto;
     Vector3 lastVehicleVelocity;
@@ -82,6 +93,8 @@ public class PlayerSeat : MonoBehaviour
             ForestAudio.Play(ForestSound.Ratchet, 0.6f);
         }
 
+        UpdateIgnition();
+
         bool wipersPressed = Input.ConsumeWipers();
         if (IsSeated && wipersPressed)
         {
@@ -108,6 +121,77 @@ public class PlayerSeat : MonoBehaviour
             Exit();
         else if (InteractionRay.Cast(view.transform, out RaycastHit hit) && InteractionRay.IsFreeVehicle(hit, out VehicleController target))
             Enter(target);
+    }
+
+    // Зажигание: зажать K и держать, пока стартер не схватит. Холодной ночью и на битой машине дольше.
+    // Короткое нажатие на работающем моторе глушит его.
+    void UpdateIgnition()
+    {
+        bool pressed = Input.ConsumeIgnition();
+        if (!IsSeated)
+        {
+            crankTime = 0f;
+            return;
+        }
+
+        if (Vehicle.EngineOn)
+        {
+            crankTime = 0f;
+            if (pressed)
+            {
+                Vehicle.EngineOn = false;
+                ForestAudio.Play(ForestSound.Click, 0.6f);
+            }
+            return;
+        }
+
+        if (!Input.IgnitionHeld)
+        {
+            crankTime = 0f;
+            crankFailed = false;
+            return;
+        }
+        if (crankFailed)
+            return;
+
+        if (Vehicle.Battery < DeadBattery)
+        {
+            ForestAudio.Play(ForestSound.Click, 0.7f);
+            StoryUI.Instance.Say("Только щелчок: аккумулятор сел. Нужен другой.");
+            crankFailed = true;
+            return;
+        }
+
+        if (crankTime <= 0f)
+        {
+            crankNeed = Random.Range(CrankMinSeconds, CrankMaxSeconds)
+                * (DayNightCycle.IsDark ? NightCrankFactor : 1f)
+                * Mathf.Lerp(WornCrankFactor, 1f, Vehicle.Condition);
+            ForestAudio.Play(ForestSound.Click, 0.6f);
+        }
+
+        crankTime += Time.fixedDeltaTime;
+        Vehicle.Battery = Mathf.Max(0f, Vehicle.Battery - CrankDrainPerSecond * Time.fixedDeltaTime);
+        StoryUI.Instance.ShowBar("Стартер", crankTime / crankNeed);
+        if (Time.time > nextChurn)
+        {
+            nextChurn = Time.time + CrankChurnPeriod;
+            ForestAudio.Play(ForestSound.Ratchet, 0.22f);
+        }
+
+        if (crankTime < crankNeed)
+            return;
+
+        crankTime = 0f;
+        if (Vehicle.FuelLiters > 0f)
+        {
+            Vehicle.EngineOn = true;
+            return;
+        }
+
+        crankFailed = true;
+        ForestAudio.Play(ForestSound.Stall, 0.6f);
+        StoryUI.Instance.Say("Крутит, но не схватывает: в баке пусто.");
     }
 
     // С полной канистрой в руках E у машины льёт в бак: садиться с ней незачем, пока бак не полон.
@@ -191,6 +275,7 @@ public class PlayerSeat : MonoBehaviour
         Rigidbody vehicleBody = Vehicle.GetComponent<Rigidbody>();
         Vehicle.SetDriverInput(Vector2.zero);
         Vehicle.Driver = null;
+        Vehicle.EngineOn = false;
         if (WorldSync.Instance != null)
             WorldSync.Instance.SetLocalDriver(false);
 

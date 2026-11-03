@@ -12,6 +12,7 @@ public class PlayerInputReader : MonoBehaviour
     public bool PushHeld { get; private set; }
     public bool InteractHeld { get; private set; }
     public bool WrenchHeld { get; private set; }
+    public bool IgnitionHeld { get; private set; }
 
     // Выбор в разговоре: номер нажатой клавиши на этот кадр, 0 — ничего. Читают его в Update.
     public int ChoicePressed { get; private set; }
@@ -19,9 +20,9 @@ public class PlayerInputReader : MonoBehaviour
     const int MaxChoices = 7;
 
     InputActionMap map;
-    InputAction wrench, move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, wipers, recover, cancel;
+    InputAction ignition, wrench, move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, wipers, recover, cancel;
     readonly InputAction[] choices = new InputAction[MaxChoices];
-    bool grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, wipersLatched, recoverLatched, skipLatched;
+    bool ignitionLatched, grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, wipersLatched, recoverLatched, skipLatched;
 
     void Awake()
     {
@@ -45,6 +46,7 @@ public class PlayerInputReader : MonoBehaviour
         headlights = map.AddAction("Headlights", InputActionType.Button, "<Keyboard>/l");
         wipers = map.AddAction("Wipers", InputActionType.Button, "<Keyboard>/v");
         wrench = map.AddAction("Wrench", InputActionType.Button, "<Keyboard>/g");
+        ignition = map.AddAction("Ignition", InputActionType.Button, "<Keyboard>/k");
         recover = map.AddAction("Recover", InputActionType.Button, "<Keyboard>/r");
         cancel = map.AddAction("Cancel", InputActionType.Button, "<Keyboard>/escape");
         for (int i = 0; i < MaxChoices; i++)
@@ -75,6 +77,7 @@ public class PlayerInputReader : MonoBehaviour
             PushHeld = false;
             InteractHeld = false;
             WrenchHeld = false;
+            IgnitionHeld = false;
             return;
         }
 
@@ -84,6 +87,8 @@ public class PlayerInputReader : MonoBehaviour
         PushHeld = push.IsPressed();
         InteractHeld = interact.IsPressed();
         WrenchHeld = wrench.IsPressed();
+        IgnitionHeld = ignition.IsPressed();
+        ignitionLatched |= ignition.WasPressedThisFrame();
 
         for (int i = 0; i < MaxChoices; i++)
         {
@@ -137,6 +142,13 @@ public class PlayerInputReader : MonoBehaviour
     {
         bool pressed = headlightsLatched;
         headlightsLatched = false;
+        return pressed;
+    }
+
+    public bool ConsumeIgnition()
+    {
+        bool pressed = ignitionLatched;
+        ignitionLatched = false;
         return pressed;
     }
 

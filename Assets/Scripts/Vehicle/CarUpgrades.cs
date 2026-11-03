@@ -10,6 +10,13 @@ public class CarUpgrades : MonoBehaviour
     const float BaseMass = 1500f;
     const float BaseRadius = 0.42f;
     const float UnmountReach = 1.5f;
+    const float DamageSpeed = 5f;
+    const float DamagePerSpeed = 0.018f;
+    const float ArmorProtection = 0.06f;
+    const float MaxProtection = 0.65f;
+    const float StallDamage = 0.12f;
+    const float SmokeCondition = 0.4f;
+    const float RepairAmount = 0.45f;
 
     // Заводские детали уступают место новым в том же гнезде.
     static readonly Dictionary<CarSlot, string[]> StockParts = new Dictionary<CarSlot, string[]>
@@ -40,6 +47,74 @@ public class CarUpgrades : MonoBehaviour
     readonly List<GameObject> wheelLugs = new List<GameObject>();
     VehicleController car;
     Rigidbody body;
+    ParticleSystem smoke;
+    bool warnedEngine;
+
+    // Удар о твёрдое: скорость выше порога калечит машину, а броня забирает часть удара на себя.
+    void OnCollisionEnter(Collision collision)
+    {
+        if (body.isKinematic || collision.collider.CompareTag(OptimizedForestGenerator.TerrainTag))
+            return;
+        float speed = collision.relativeVelocity.magnitude;
+        if (speed < DamageSpeed || (collision.rigidbody != null && collision.rigidbody.mass < 100f && !collision.rigidbody.isKinematic))
+            return;
+
+        float protection = Mathf.Min(ArmorTotal * ArmorProtection, MaxProtection);
+        float damage = (speed - DamageSpeed) * DamagePerSpeed * (1f - protection);
+        car.Condition = Mathf.Max(0f, car.Condition - damage);
+        if (damage > StallDamage && car.EngineOn)
+        {
+            car.EngineOn = false;
+            StoryUI.Instance.Say("От удара заглох мотор.");
+        }
+        if (car.Condition < SmokeCondition && !warnedEngine && car.Driver != null)
+        {
+            warnedEngine = true;
+            StoryUI.Instance.Say("Мотор застучал и тянет слабее. Нужен ремонт.");
+        }
+    }
+
+    public void Repair()
+    {
+        car.Condition = Mathf.Min(1f, car.Condition + RepairAmount);
+        if (car.Condition >= SmokeCondition)
+            warnedEngine = false;
+    }
+
+    void Update()
+    {
+        // Битый мотор парит из-под капота, пока работает.
+        bool wanted = car.Condition < SmokeCondition && car.EngineRunning;
+        if (wanted && smoke == null)
+            smoke = BuildSmoke();
+        if (smoke != null)
+        {
+            ParticleSystem.EmissionModule emission = smoke.emission;
+            emission.rateOverTime = wanted ? Mathf.Lerp(16f, 5f, car.Condition / SmokeCondition) : 0f;
+        }
+    }
+
+    ParticleSystem BuildSmoke()
+    {
+        var smokeObject = new GameObject("EngineSmoke");
+        smokeObject.transform.SetParent(transform, false);
+        smokeObject.transform.SetLocalPositionAndRotation(new Vector3(0f, 0.25f, 1.6f), Quaternion.Euler(-80f, 0f, 0f));
+        var system = smokeObject.AddComponent<ParticleSystem>();
+        system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        ParticleSystem.MainModule main = system.main;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.startLifetime = 2.4f;
+        main.startSpeed = 0.9f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.25f, 0.6f);
+        main.startColor = new Color(0.55f, 0.57f, 0.58f, 0.16f);
+        main.maxParticles = 60;
+        ParticleSystem.ShapeModule shape = system.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(1.1f, 0.6f, 0.05f);
+        smokeObject.GetComponent<ParticleSystemRenderer>().sharedMaterial = ForestAtmosphere.CreateParticleMaterial(0.4f);
+        system.Play();
+        return system;
+    }
 
     void Awake()
     {
@@ -227,6 +302,7 @@ public class CarUpgrades : MonoBehaviour
     {
         var text = new StringBuilder();
         text.Append("Масса ").Append(Mathf.RoundToInt(body.mass)).Append(" кг, бак ").Append(Mathf.RoundToInt(car.TankSize)).Append(" л, защита ").Append(Mathf.RoundToInt(ArmorTotal)).Append('\n');
+        text.Append("Состояние ").Append(Mathf.RoundToInt(car.Condition * 100f)).Append("%, аккумулятор ").Append(Mathf.RoundToInt(car.Battery * 100f)).Append("%\n");
         if (mounted.Count == 0)
             text.Append("всё заводское\n");
         foreach (KeyValuePair<CarSlot, CarPartKind> pair in mounted)

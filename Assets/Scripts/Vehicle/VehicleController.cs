@@ -36,6 +36,9 @@ public class VehicleController : MonoBehaviour
 
     // В глубокой грязи мотор тянет на тех же оборотах вдвое тяжелее.
     const float MudBurn = 1f;
+    const float BatteryChargePerSecond = 0.012f;
+    const float LightsDrainPerSecond = 1f / 300f;
+    const float WornTorque = 0.45f;
     const float FillerSwing = 110f;
     const float FillerResponse = 9f;
     const float LowFuelFraction = 0.15f;
@@ -59,7 +62,10 @@ public class VehicleController : MonoBehaviour
     public float ForwardSpeed => Vector3.Dot(body.linearVelocity, transform.forward);
     public float SteerAngle => currentSteer;
     public float Throttle => throttle;
-    public bool EngineRunning => IsOccupied && FuelLiters > 0f;
+    public bool EngineOn { get; set; }
+    public bool EngineRunning => IsOccupied && EngineOn && FuelLiters > 0f;
+    public float Battery { get; set; } = 1f;
+    public float Condition { get; set; } = 1f;
     public float FuelLiters { get; private set; } = BaseTank;
     public float TankSize => BaseTank + tankBonus;
     public float FuelFraction => FuelLiters / TankSize;
@@ -296,6 +302,20 @@ public class VehicleController : MonoBehaviour
         ApplyMud();
         ApplyAntiRoll();
 
+        // Генератор заряжает от мотора. Фары без мотора садят аккумулятор, и он гаснет насовсем.
+        if (EngineRunning)
+        {
+            Battery = Mathf.Min(1f, Battery + BatteryChargePerSecond * Time.fixedDeltaTime);
+        }
+        else if (LightsOn && !RemoteDriven)
+        {
+            Battery = Mathf.Max(0f, Battery - LightsDrainPerSecond * Time.fixedDeltaTime);
+            if (Battery <= 0f)
+                SetLights(false);
+        }
+        if (EngineOn && FuelLiters <= 0f)
+            EngineOn = false;
+
         if (EngineRunning)
             FuelLiters = Mathf.Max(0f, FuelLiters - (IdleBurn + ThrottleBurn * Mathf.Abs(throttle) * (1f + MudBurn * CurrentMudDepth)) * burnFactor * Time.fixedDeltaTime);
 
@@ -307,7 +327,7 @@ public class VehicleController : MonoBehaviour
 
         // Газ против движения сначала тормозит машину и только потом включает обратный ход.
         bool opposing = throttle * speed < 0f && absSpeed > OpposingSpeedThreshold;
-        float motor = opposing || HandbrakeOn || !EngineRunning ? 0f : throttle * MotorTorque * torqueFactor * Mathf.Clamp01(1f - absSpeed / limit);
+        float motor = opposing || HandbrakeOn || !EngineRunning ? 0f : throttle * MotorTorque * torqueFactor * Mathf.Lerp(WornTorque, 1f, Condition) * Mathf.Clamp01(1f - absSpeed / limit);
 
         float brake = RollingResistance;
         if (HandbrakeOn)

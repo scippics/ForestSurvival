@@ -7,13 +7,17 @@ public class PlayerWrench : MonoBehaviour
     const float RatchetPeriod = 0.42f;
     const float WobbleMax = 0.012f;
     const float DropDistance = 1.3f;
+    const float BatterySeconds = 3f;
+    const float RepairSeconds = 6f;
 
     enum Job
     {
         None,
         Salvage,
         Mount,
-        Unmount
+        Unmount,
+        Battery,
+        Repair
     }
 
     public string Prompt { get; private set; } = "";
@@ -55,6 +59,10 @@ public class PlayerWrench : MonoBehaviour
         {
             if (hands.Held.TryGetComponent(out item) && InteractionRay.IsFreeVehicle(hit, out car) && car.TryGetComponent(out CarUpgrades _))
                 return Job.Mount;
+            if (hands.Held.TryGetComponent(out CarBatteryItem _) && InteractionRay.IsFreeVehicle(hit, out car))
+                return Job.Battery;
+            if (hands.Held.TryGetComponent(out RepairKit _) && InteractionRay.IsFreeVehicle(hit, out car) && car.Condition < 1f)
+                return Job.Repair;
             return Job.None;
         }
 
@@ -82,6 +90,12 @@ public class PlayerWrench : MonoBehaviour
             case Job.Unmount:
                 Prompt = "Зажать G - Снять: " + CarParts.Info[car.GetComponent<CarUpgrades>().Mounted[slot]].Name;
                 break;
+            case Job.Battery:
+                Prompt = "Зажать G - Поменять аккумулятор: в машине " + Mathf.RoundToInt(car.Battery * 100f) + "%, этот " + Mathf.RoundToInt(hands.Held.GetComponent<CarBatteryItem>().Charge * 100f) + "%";
+                break;
+            case Job.Repair:
+                Prompt = "Зажать G - Чинить: состояние " + Mathf.RoundToInt(car.Condition * 100f) + "%";
+                break;
             default:
                 Prompt = "";
                 break;
@@ -97,7 +111,7 @@ public class PlayerWrench : MonoBehaviour
             return;
         }
 
-        Object target = job == Job.Salvage ? part : job == Job.Mount ? item : (Object)car;
+        Object target = job == Job.Salvage ? part : job == Job.Mount ? item : job == Job.Battery || job == Job.Repair ? hands.Held : (Object)car;
         int stamp = (int)job * 100 + (int)slot;
         if (target != lastTarget || stamp != lastJobStamp)
             progress = 0f;
@@ -105,13 +119,30 @@ public class PlayerWrench : MonoBehaviour
         lastJobStamp = stamp;
         WorkPoint = point;
 
-        CarPartInfo info = job == Job.Salvage ? CarParts.Info[part.Kind]
-            : job == Job.Mount ? item.Info
-            : CarParts.Info[car.GetComponent<CarUpgrades>().Mounted[slot]];
+        string workName;
+        float seconds;
+        if (job == Job.Battery)
+        {
+            workName = "Аккумулятор";
+            seconds = BatterySeconds;
+        }
+        else if (job == Job.Repair)
+        {
+            workName = "Ремонт";
+            seconds = RepairSeconds;
+        }
+        else
+        {
+            CarPartInfo info = job == Job.Salvage ? CarParts.Info[part.Kind]
+                : job == Job.Mount ? item.Info
+                : CarParts.Info[car.GetComponent<CarUpgrades>().Mounted[slot]];
+            workName = info.Name;
+            seconds = info.Seconds;
+        }
 
         progress += Time.fixedDeltaTime;
-        float done = progress / info.Seconds;
-        StoryUI.Instance.ShowBar(info.Name, done);
+        float done = progress / seconds;
+        StoryUI.Instance.ShowBar(workName, done);
         if (part != null)
             part.Wobble(WobbleMax * done);
 
@@ -129,6 +160,8 @@ public class PlayerWrench : MonoBehaviour
             case Job.Salvage: FinishSalvage(part); break;
             case Job.Mount: FinishMount(item, car); break;
             case Job.Unmount: FinishUnmount(car, slot, point); break;
+            case Job.Battery: FinishBattery(car); break;
+            case Job.Repair: FinishRepair(car); break;
         }
         ForestAudio.Play(ForestSound.Click, 0.6f);
         Stop();
@@ -139,6 +172,26 @@ public class PlayerWrench : MonoBehaviour
         progress = 0f;
         lastTarget = null;
         WorkPoint = null;
+    }
+
+    void FinishBattery(VehicleController car)
+    {
+        var item = hands.Held.GetComponent<CarBatteryItem>();
+        float old = car.Battery;
+        car.Battery = item.Charge;
+        item.Charge = old;
+        StoryUI.Instance.Say("Аккумулятор заменён: теперь " + Mathf.RoundToInt(car.Battery * 100f) + "%.");
+    }
+
+    void FinishRepair(VehicleController car)
+    {
+        GameObject kit = hands.Held.gameObject;
+        hands.ReleaseHeld();
+        car.GetComponent<CarUpgrades>().Repair();
+        if (WorldSync.Instance != null)
+            WorldSync.Instance.AnnounceItemRemoved(kit.name);
+        Destroy(kit);
+        StoryUI.Instance.Say("Подлатал как мог: состояние " + Mathf.RoundToInt(car.Condition * 100f) + "%.");
     }
 
     void FinishSalvage(SalvagePart part)

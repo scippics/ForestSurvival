@@ -115,6 +115,8 @@ public class OptimizedForestGenerator : MonoBehaviour
     const double WreckChance = 0.2;
     const double WreckCellsChance = 0.3;
     const double WreckCanChance = 0.15;
+    const double WreckKitChance = 0.2;
+    const double WreckBatteryChance = 0.25;
     const double WreckByRoadChance = 0.6;
     const float CrownLodDistance = 30f;
     const float LodRefreshDistance = 4f;
@@ -478,6 +480,10 @@ public class OptimizedForestGenerator : MonoBehaviour
             DropWreckLoot(ProceduralModels.CellsKind, chunk.Coord, 0, ground, site, random);
         if (random.NextDouble() < WreckCanChance)
             DropWreckLoot(ProceduralModels.JerrycanKind, chunk.Coord, 1, ground, site, random);
+        if (random.NextDouble() < WreckKitChance)
+            DropWreckLoot(ProceduralModels.KitKind, chunk.Coord, 2, ground, site, random);
+        if (random.NextDouble() < WreckBatteryChance)
+            DropWreckLoot(ProceduralModels.BatteryKind, chunk.Coord, 3, ground, site, random);
     }
 
     void DropWreckLoot(string kind, Vector2Int coord, int index, Vector3 ground, WreckSite site, System.Random random)
@@ -1083,7 +1089,7 @@ public class OptimizedForestGenerator : MonoBehaviour
             float x = center.x + Mathf.Cos(angle) * distance;
             float z = center.z + Mathf.Sin(angle) * distance;
             double roll = random.NextDouble();
-            string kind = roll < 0.45 ? ProceduralModels.JerrycanKind : roll < 0.8 ? ProceduralModels.CellsKind : ProceduralModels.BatteryKind;
+            string kind = roll < 0.4 ? ProceduralModels.JerrycanKind : roll < 0.7 ? ProceduralModels.CellsKind : roll < 0.85 ? ProceduralModels.KitKind : ProceduralModels.BatteryKind;
             string lootName = ProceduralModels.LootPrefix + kind + "_" + coord.x + "_" + coord.y + "_" + i;
 
             // Канистра лежит на боку или стоит: разбросано как попало, а не выставлено.
@@ -1091,6 +1097,9 @@ public class OptimizedForestGenerator : MonoBehaviour
             var position = new Vector3(x, TerrainHeight(x, z) + CampLootDropHeight, z);
             GameObject loot = ProceduralModels.CreateLoot(lootName, position, rotation);
             Track(loot.GetComponent<Rigidbody>());
+
+            if (loot.TryGetComponent(out CarBatteryItem battery))
+                battery.Charge = Mathf.Lerp(0.25f, 1f, (float)random.NextDouble());
 
             // Брошенные канистры редко бывают полными.
             if (loot.TryGetComponent(out FuelCan can) && random.NextDouble() < CampCanFillChance)

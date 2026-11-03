@@ -266,6 +266,16 @@ public static class CarPartModels
     }
 }
 
+// Аккумулятор в руках: помнит свой заряд, у брошенных он разный.
+public class CarBatteryItem : MonoBehaviour
+{
+    public float Charge = 0.9f;
+}
+
+public class RepairKit : MonoBehaviour
+{
+}
+
 // Лежит на земле, таскается в руках и ставится на машину зажатой G.
 public class CarPartItem : MonoBehaviour
 {

@@ -15,6 +15,7 @@ public class InteractionUI : MonoBehaviour
     const string PromptCloseNote = "ЛКМ - Убрать записку";
     const string PromptPour = "Зажать E - Залить в бак: ";
     const string PromptNoFuel = "Бак пуст: мотор не заведётся\n";
+    const string PromptStart = "Зажать K - Завести мотор\n";
     const string PromptDrag = "ЛКМ - Оттащить с дороги";
     const string PromptCells = "ЛКМ - Взять батарейки";
     const string PromptInsert = "ЛКМ - Вставить шланг в бак";
@@ -140,6 +141,8 @@ public class InteractionUI : MonoBehaviour
             string driving = PromptDriving + WiperNames[seat.Vehicle.WiperMode] + PromptHandbrake + (seat.Vehicle.HandbrakeOn ? "вкл" : "выкл");
             if (seat.Vehicle.FuelLiters <= 0f)
                 driving = PromptNoFuel + driving;
+            else if (!seat.Vehicle.EngineOn)
+                driving = PromptStart + driving;
             return seat.Vehicle.IsOverturned ? PromptOverturned + driving : driving;
         }
 

@@ -242,7 +242,7 @@ public class WorldSync : NetworkBehaviour
             if (HasClients && Time.unscaledTime >= nextCarSend)
             {
                 nextCarSend = Time.unscaledTime + CarSendPeriod;
-                CarStateRpc(carBody.position, carBody.rotation, carBody.linearVelocity, car.Throttle, car.SteerInput, car.FuelLiters, car.LightsOn, car.HandbrakeOn, car.WiperMode);
+                CarStateRpc(carBody.position, carBody.rotation, carBody.linearVelocity, car.Throttle, car.SteerInput, car.FuelLiters, car.LightsOn, car.HandbrakeOn, car.WiperMode, car.EngineOn, car.Condition, car.Battery);
             }
             return;
         }
@@ -266,7 +266,7 @@ public class WorldSync : NetworkBehaviour
     }
 
     [Rpc(SendTo.NotMe, Delivery = RpcDelivery.Unreliable)]
-    void CarStateRpc(Vector3 position, Quaternion rotation, Vector3 velocity, float throttle, float steer, float fuel, bool lights, bool handbrake, int wipers)
+    void CarStateRpc(Vector3 position, Quaternion rotation, Vector3 velocity, float throttle, float steer, float fuel, bool lights, bool handbrake, int wipers, bool engine, float condition, float battery)
     {
         if (SimulatesCar())
             return;
@@ -279,6 +279,9 @@ public class WorldSync : NetworkBehaviour
         car.SetFuel(fuel);
         car.HandbrakeOn = handbrake;
         car.WiperMode = wipers;
+        car.EngineOn = engine;
+        car.Condition = condition;
+        car.Battery = battery;
         if (car.LightsOn != lights)
             car.SetLights(lights);
     }

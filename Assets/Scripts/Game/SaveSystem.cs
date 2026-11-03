@@ -55,6 +55,9 @@ public static class SaveSystem
         public List<Vector2Int> visitedBlocks = new List<Vector2Int>();
         public List<Vector2Int> visitedWrecks = new List<Vector2Int>();
         public float torchUsed;
+        public float carDamage;
+        public float batteryUsed;
+        public bool engineOn;
     }
 
     static string SavePath => Path.Combine(Application.persistentDataPath, FileName);
@@ -92,6 +95,9 @@ public static class SaveSystem
             visitedBlocks = forest.VisitedBlocks,
             visitedWrecks = forest.VisitedWrecks,
             torchUsed = 1f - player.GetComponent<TorchCharge>().Charge,
+            carDamage = 1f - vehicle.Condition,
+            batteryUsed = 1f - vehicle.Battery,
+            engineOn = vehicle.EngineOn,
             recipes = new List<string>(player.GetComponent<BlueprintNotebook>().unlockedRecipes)
         };
 
@@ -144,6 +150,8 @@ public static class SaveSystem
         foreach (int kind in data.mountedParts)
             upgrades.Mount((CarPartKind)kind, out _);
         vehicle.SetFuel(data.fuelLiters);
+        vehicle.Condition = 1f - data.carDamage;
+        vehicle.Battery = 1f - data.batteryUsed;
 
         foreach (WreckState wreck in data.wrecks)
             AbandonedCar.ApplyState(wreck.id, wreck.liters, wreck.takenMask);
@@ -216,6 +224,7 @@ public static class SaveSystem
         if (data.seated)
         {
             player.Enter(vehicle);
+            vehicle.EngineOn = data.engineOn;
             view.SetLook(data.playerYaw, data.playerPitch);
         }
         else
