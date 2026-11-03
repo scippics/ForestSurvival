@@ -57,6 +57,12 @@
 codesign --force --deep --sign - ForestSurvival.app
 ```
 
+## Если Mac сильно греется
+
+В настройках игры снизь качество и поставь предел FPS 30. После игры нажми F9 (или Fn+F9) прямо в игре: откроется папка, из неё пришли файл `ForestSurvival_Performance.txt`. Закрывать игру лучше через меню: так в файл попадёт итог сессии.
+
+В файле по минутам записаны FPS, нагрузка процессора и видеокарты и занятая память. Температуру он не показывает.
+
 ## Если что-то сломалось
 
 Игра сама собирает проблемы в один файл `ForestSurvival_Report.txt`. Его и нужно прислать.
@@ -70,6 +76,7 @@ codesign --force --deep --sign - ForestSurvival.app
 | Файл | Путь |
 |---|---|
 | Отчёт | `~/Library/Application Support/DefaultCompany/ForestSurvival/ForestSurvival_Report.txt` |
+| Журнал производительности | `~/Library/Application Support/DefaultCompany/ForestSurvival/ForestSurvival_Performance.txt` |
 | Лог движка | `~/Library/Logs/DefaultCompany/ForestSurvival/Player.log` |
 
 Что написать вместе с файлом:

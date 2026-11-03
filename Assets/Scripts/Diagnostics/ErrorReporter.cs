@@ -69,7 +69,7 @@ public class ErrorReporter : MonoBehaviour
         }
 
         Keyboard keyboard = Keyboard.current;
-        if (keyboard != null && keyboard.f9Key.wasPressedThisFrame && File.Exists(reportPath))
+        if (keyboard != null && keyboard.f9Key.wasPressedThisFrame)
             Application.OpenURL(new Uri(folder).AbsoluteUri);
     }
 
