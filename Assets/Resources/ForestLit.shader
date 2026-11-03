@@ -125,7 +125,7 @@ Shader "Forest/Lit"
                 {
                     // Ткань из текстуры шума: вдали её сглаживают мипмапы, а рисунок из синусов бился с пикселями в муар.
                     float cloth = tex2D(_ForestNoise, (p.xy + p.zx) * 21.0).b;
-                    albedo *= (0.95 + 0.1 * cloth) * (0.88 + 0.24 * wear);
+                    albedo *= (0.97 + 0.06 * cloth) * (0.92 + 0.16 * wear);
                 }
                 else if (_Surface < 2.5)
                 {
@@ -156,15 +156,13 @@ Shader "Forest/Lit"
                 float mud = saturate((-0.12 - p.y) * 2.2 + (blotch - 0.5) * 1.1 + (fine - 0.5) * 0.7) * _Grime;
                 albedo *= lerp(1.0, 0.72 + 0.56 * blotch, _Grime);
 
-                // Сколы и ржавчина: на старой машине краска сходит пятнами, а царапины идут вдоль кузова.
+                // Сколы и ржавчина: на старой машине краска сходит пятнами. Царапин нет: длинные штрихи читались как полосы.
                 float patch = tex2D(_ForestNoise, p.zy * 0.8 + p.x * 0.7 + 0.37).r;
                 float rust = smoothstep(0.7, 0.8, patch + (0.02 - p.y) * 0.12) * smoothstep(0.35, 0.55, fine) * _Grime;
 
                 // На чёрных деталях ржавчины не видно: они пластиковые или в краске-грунте.
                 rust *= saturate(dot(albedo, float3(0.3, 0.6, 0.1)) * 30.0);
                 albedo = lerp(albedo, float3(0.05, 0.024, 0.012) * (0.6 + 0.8 * fine), rust * 0.8);
-                float scratch = smoothstep(0.82, 0.9, tex2D(_ForestNoise, float2(p.y * 3.1, p.z * 1.1 + p.x)).a);
-                albedo = lerp(albedo, albedo * 1.35 + 0.006, scratch * (1.0 - rust) * _Grime * 0.35);
                 smoothness *= 1.0 - rust;
                 albedo = lerp(albedo, float3(0.016, 0.012, 0.009), mud);
                 smoothness *= (1.0 - mud) * lerp(1.0, 0.5 + fine, _Grime);

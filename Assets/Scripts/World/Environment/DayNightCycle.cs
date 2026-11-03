@@ -14,6 +14,11 @@ public class DayNightCycle : MonoBehaviour
     const float CabinFillFromFog = 1.25f;
     const float DarkSunHeight = 0.1f;
 
+    // Косые лучи кладут длинные тени от стволов и крон параллельно друг другу: чем ниже солнце, тем они мягче,
+    // как в лесу, где свет рассеян туманом. Днём тени плотнее.
+    const float LowSunShadow = 0.38f;
+    const float HighSunShadow = 0.62f;
+
     static readonly Color SunColor = new Color(1f, 0.93f, 0.8f);
     static readonly Color LowSunColor = new Color(1f, 0.62f, 0.36f);
     static readonly Color DayFog = new Color(0.36f, 0.42f, 0.46f);
@@ -62,6 +67,7 @@ public class DayNightCycle : MonoBehaviour
         // Под горизонтом свет шёл бы сквозь землю снизу, поэтому он выключается целиком.
         sun.intensity = MaxIntensity * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.25f, height));
         sun.enabled = sun.intensity > 0f;
+        sun.shadowStrength = Mathf.Lerp(LowSunShadow, HighSunShadow, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.1f, 0.7f, height)));
         sun.color = Color.Lerp(LowSunColor, SunColor, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.05f, 0.45f, height)));
 
         Color fog = Color.Lerp(NightFog, DuskFog, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.15f, 0.05f, height)));

@@ -169,7 +169,9 @@ Shader "Hidden/ForestPost"
     float4 FragRayBlur(v2f_img i) : SV_Target
     {
         float2 stride = (_SunViewport.xy - i.uv) * _RayStep;
-        float2 uv = i.uv;
+
+        // Свой сдвиг начала у каждого пикселя: ступени шага превращаются в шум, который убирает второй проход.
+        float2 uv = i.uv + stride * WhiteNoise(i.pos.xy);
         float total = 0.0;
         float decay = 1.0;
         for (int s = 0; s < RAY_SAMPLES; s++)

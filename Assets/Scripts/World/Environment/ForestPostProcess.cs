@@ -133,7 +133,7 @@ public class ForestPostProcess : MonoBehaviour
     {
         int width = source.width / 4;
         int height = source.height / 4;
-        RenderTexture first = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
+        RenderTexture first = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.RHalf);
         first.filterMode = FilterMode.Bilinear;
 
         Vector3 sunPoint = view.WorldToViewportPoint(view.transform.position - sun.transform.forward * view.farClipPlane);
@@ -144,7 +144,7 @@ public class ForestPostProcess : MonoBehaviour
             return first;
         }
 
-        RenderTexture second = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
+        RenderTexture second = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.RHalf);
         second.filterMode = FilterMode.Bilinear;
 
         // Чем дальше солнце за краем кадра, тем слабее лучи: иначе они идут почти параллельно
