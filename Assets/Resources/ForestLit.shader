@@ -97,13 +97,12 @@ Shader "Forest/Lit"
             {
                 float3 p = IN.vehiclePos;
                 float wear = tex2D(_ForestNoise, p.xz * 0.9 + p.y * 1.3).g;
-                float weaveFade = saturate(1.0 - fwidth(p.x + p.y + p.z) * 260.0);
                 float grain = tex2D(_ForestNoise, (p.xy + p.zx) * 4.5).b;
                 if (_Surface < 1.5)
                 {
-                    // Вдали плетение гаснет: мельче пикселя оно давало бы муар.
-                    float weave = sin((p.x + p.z) * 340.0) * sin((p.y - p.z) * 340.0);
-                    albedo *= (1.0 + 0.1 * weave * weaveFade) * (0.88 + 0.24 * wear);
+                    // Ткань из текстуры шума: вдали её сглаживают мипмапы, а рисунок из синусов бился с пикселями в муар.
+                    float cloth = tex2D(_ForestNoise, (p.xy + p.zx) * 21.0).b;
+                    albedo *= (0.95 + 0.1 * cloth) * (0.88 + 0.24 * wear);
                 }
                 else if (_Surface < 2.5)
                 {
