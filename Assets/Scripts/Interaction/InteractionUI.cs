@@ -186,6 +186,11 @@ public class InteractionUI : MonoBehaviour
                 outlined = seat.Vehicle.IgnitionKey;
                 return KeyInteract;
             }
+            if (seat.AimingAtRadio)
+            {
+                outlined = seat.Vehicle.RadioFace;
+                return KeyInteract;
+            }
             return seat.Vehicle.IsOverturned ? KeyRecover : "";
         }
 

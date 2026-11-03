@@ -236,14 +236,30 @@ public class MainMenu : MonoBehaviour
         });
         SetLimitLabel(limit);
 
-        MenuButton back = CreateButton(settingsPanel.transform, "НАЗАД", 230f, CloseSubPanel);
-        Navigate(quality, screen, limit, back);
+        MenuButton stream = null;
+        stream = CreateButton(settingsPanel.transform, "", 260f, () =>
+        {
+            GameSettings.AllowExternalAudioStreaming = !GameSettings.AllowExternalAudioStreaming;
+            SetStreamLabel(stream);
+        });
+        SetStreamLabel(stream);
+        stream.SetInteractable(RadioCapture.IsSupported);
+        if (!RadioCapture.IsSupported)
+            stream.SetHint("только на Windows");
+
+        MenuButton back = CreateButton(settingsPanel.transform, "НАЗАД", 160f, CloseSubPanel);
+        Navigate(quality, screen, limit, stream, back);
         settingsPanel.SetActive(false);
     }
 
     static void SetQualityLabel(MenuButton button)
     {
         button.GetComponentInChildren<Text>().text = "КАЧЕСТВО: " + GameSettings.QualityNames[GameSettings.Quality];
+    }
+
+    static void SetStreamLabel(MenuButton button)
+    {
+        button.GetComponentInChildren<Text>().text = "ЗВУК ПК В МАГНИТОЛУ: " + (GameSettings.AllowExternalAudioStreaming ? "РАЗРЕШЁН" : "ЗАПРЕЩЁН");
     }
 
     static void SetLimitLabel(MenuButton button)

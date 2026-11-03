@@ -22,6 +22,7 @@ public class PlayerSeat : MonoBehaviour
 
     // Ключ не имеет коллайдера, чтобы не стать частью кузова: на него смотрят, а не целятся лучом.
     public bool AimingAtKey => IsDriver && Vector3.Angle(view.transform.forward, Vehicle.IgnitionKey.position - view.transform.position) < KeyAimDegrees;
+    public bool AimingAtRadio => IsDriver && Vector3.Angle(view.transform.forward, Vehicle.RadioFace.position - view.transform.position) < RadioAimDegrees;
 
     const float SwayPerAcceleration = 0.006f;
     const float SwayMax = 0.06f;
@@ -38,11 +39,15 @@ public class PlayerSeat : MonoBehaviour
     const float NightCrankFactor = 1.35f;
     const float WornCrankFactor = 2f;
     const float KeyAimDegrees = 5f;
+    const float RadioAimDegrees = 5f;
+    const float RadioHoldSeconds = 0.7f;
 
     float crankTime;
     float crankNeed;
     float nextChurn;
     bool crankFailed;
+    float radioHold;
+    bool radioLatched;
     FuelCan pouringCan;
     VehicleController pouringInto;
     Vector3 lastVehicleVelocity;
@@ -129,6 +134,14 @@ public class PlayerSeat : MonoBehaviour
         }
         StopCranking();
 
+        if (IsDriver && AimingAtRadio)
+        {
+            UpdateRadio();
+            return;
+        }
+        radioHold = 0f;
+        radioLatched = false;
+
         if (TryPour() || !interactPressed)
             return;
 
@@ -159,6 +172,27 @@ public class PlayerSeat : MonoBehaviour
                 return candidate;
         }
         return NoSeat;
+    }
+
+    // Удержание, а не клик: случайно начать трансляцию звука своего компьютера нельзя.
+    void UpdateRadio()
+    {
+        if (!Input.InteractHeld)
+        {
+            radioHold = 0f;
+            radioLatched = false;
+            return;
+        }
+        if (radioLatched)
+            return;
+
+        radioHold += Time.fixedDeltaTime;
+        if (radioHold < RadioHoldSeconds)
+            return;
+
+        radioLatched = true;
+        bool done = RadioStreamNetworker.Instance != null && RadioStreamNetworker.Instance.Toggle();
+        ForestAudio.Play(ForestSound.Click, done ? 0.7f : 0.25f);
     }
 
     void StopCranking()
