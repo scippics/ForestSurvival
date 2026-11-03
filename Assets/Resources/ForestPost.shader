@@ -12,10 +12,12 @@ Shader "Hidden/ForestPost"
 
     #define AO_SAMPLES 10
     #define RAY_SAMPLES 14
+    #define AO_MAX_SCREEN_RADIUS 0.09
 
     sampler2D _MainTex;
     float4 _MainTex_TexelSize;
     UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+    float4 _CameraDepthTexture_TexelSize;
     sampler2D _AoTex, _BloomTex, _RayTex;
 
     float2 _AoDirection;
@@ -36,18 +38,33 @@ Shader "Hidden/ForestPost"
         return uv;
     }
 
+    // Центр половинного тексела попадает ровно на границу текселов глубины, и какой из них прочитается,
+    // решало округление: на отдельных строках и столбцах кадра глубина и координата расходились,
+    // и через весь экран шли тонкие линии. Поэтому координата всегда сдвигается на центр тексела.
+    float2 SnapToDepth(float2 uv)
+    {
+        return (floor(uv * _CameraDepthTexture_TexelSize.zw) + 0.5) * _CameraDepthTexture_TexelSize.xy;
+    }
+
     float3 ViewPosition(float2 uv, float eye)
     {
         float2 slope = float2(1.0 / unity_CameraProjection._11, 1.0 / unity_CameraProjection._22);
         return float3((uv * 2.0 - 1.0) * slope * eye, eye);
     }
 
-    // Без упорядоченного шума: его почти вертикальный шаблон на тёмной земле читался как полосы на камере.
     float WhiteNoise(float2 p)
     {
-        p = frac(p * float2(0.1031, 0.1030));
-        p += dot(p, p.yx + 33.33);
-        return frac((p.x + p.y) * p.x);
+        float3 q = frac(p.xyx * 0.1031);
+        q += dot(q, q.yzx + 33.33);
+        return frac((q.x + q.y) * q.z);
+    }
+
+    // Поворот сэмплов AO: шаблон 4 на 4, ровно столько и усредняет размытие. Случайный шум здесь рисовал
+    // на всю ширину кадра полосы: строки и столбцы с похожим поворотом затенялись одинаково.
+    float AoRotation(float2 pixel)
+    {
+        int2 cell = int2(fmod(floor(pixel), 4.0));
+        return frac((cell.x * 4.0 + cell.y * 9.0 + (cell.x ^ cell.y) * 5.0) / 16.0);
     }
 
     // Один пиксель с NaN размытие разносит на весь кадр, и экран становится чёрным.
@@ -64,7 +81,7 @@ Shader "Hidden/ForestPost"
     // AO: доля полусферы вокруг точки, закрытая соседней геометрией. RG — затенение и глубина для размытия.
     float4 FragAo(v2f_img i) : SV_Target
     {
-        float2 uv = DepthUv(i.uv);
+        float2 uv = SnapToDepth(DepthUv(i.uv));
         float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
         float eye = LinearEyeDepth(raw);
         float normalized = Linear01Depth(raw);
@@ -75,16 +92,18 @@ Shader "Hidden/ForestPost"
         float3 normal = normalize(cross(ddy(position), ddx(position)));
         if (normal.z > 0.0)
             normal = -normal;
-        float radius = _AoRadius * unity_CameraProjection._22 * 0.5 / eye;
+        // Вблизи радиус ограничен: иначе сэмплы улетают за край экрана, прилипают к его крайним строкам
+        // и рисуют на всю ширину кадра ровные линии.
+        float radius = min(_AoRadius * unity_CameraProjection._22 * 0.5 / eye, AO_MAX_SCREEN_RADIUS);
 
-        // Случайный поворот на пиксель; остаточный шум убирает размытие.
-        float angle = WhiteNoise(i.pos.xy) * 6.2831853;
+        // Свой поворот на пиксель; шаблон убирает размытие.
+        float angle = AoRotation(i.pos.xy) * 6.2831853;
         float occlusion = 0.0;
         for (int s = 0; s < AO_SAMPLES; s++)
         {
             float t = (s + 0.5) / AO_SAMPLES;
             float a = angle + t * 24.0;
-            float2 sampleUv = uv + float2(cos(a), sin(a)) * radius * t * float2(_MainTex_TexelSize.w / _MainTex_TexelSize.z, 1.0);
+            float2 sampleUv = SnapToDepth(uv + float2(cos(a), sin(a)) * radius * t * float2(_MainTex_TexelSize.w / _MainTex_TexelSize.z, 1.0));
             float sampleEye = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, sampleUv));
             float3 delta = ViewPosition(sampleUv, sampleEye) - position;
             float lengthSq = dot(delta, delta);
@@ -99,14 +118,13 @@ Shader "Hidden/ForestPost"
     // Размытие не переходит через разрыв глубины, иначе вокруг стволов появлялся бы ореол.
     float4 FragAoBlur(v2f_img i) : SV_Target
     {
+        // Четыре отсчёта между текселами дают каждому классу шаблона 4 на 4 равный вес, и шаблон исчезает.
         float4 center = tex2D(_MainTex, i.uv);
-        float total = center.r * 2.0;
-        float weight = 2.0;
-        for (int s = -2; s <= 2; s++)
+        float total = 0.0;
+        float weight = 0.0001;
+        for (int s = 0; s < 4; s++)
         {
-            if (s == 0)
-                continue;
-            float4 taken = tex2D(_MainTex, i.uv + _AoDirection * s);
+            float4 taken = tex2D(_MainTex, i.uv + _AoDirection * (s - 1.5));
             float w = saturate(1.0 - abs(taken.g - center.g) * 300.0);
             total += taken.r * w;
             weight += w;
