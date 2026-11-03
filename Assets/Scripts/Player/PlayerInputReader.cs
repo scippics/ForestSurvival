@@ -10,10 +10,11 @@ public class PlayerInputReader : MonoBehaviour
     public Vector2 LookDelta { get; private set; }
     public bool GrabHeld { get; private set; }
     public bool PushHeld { get; private set; }
+    public bool InteractHeld { get; private set; }
 
     InputActionMap map;
     InputAction move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, recover, cancel;
-    bool grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, recoverLatched;
+    bool grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, recoverLatched, skipLatched;
 
     void Awake()
     {
@@ -51,12 +52,16 @@ public class PlayerInputReader : MonoBehaviour
         if (cancel.WasPressedThisFrame())
             GameFlow.TogglePause();
 
+        if (GameFlow.State == GameState.Cutscene)
+            skipLatched |= cancel.WasPressedThisFrame() || space.WasPressedThisFrame();
+
         if (GameFlow.State != GameState.Playing)
         {
             Move = Vector2.zero;
             LookDelta = Vector2.zero;
             GrabHeld = false;
             PushHeld = false;
+            InteractHeld = false;
             return;
         }
 
@@ -64,6 +69,7 @@ public class PlayerInputReader : MonoBehaviour
         LookDelta = look.ReadValue<Vector2>();
         GrabHeld = grab.IsPressed();
         PushHeld = push.IsPressed();
+        InteractHeld = interact.IsPressed();
 
         // Между кадрами может не быть ни одного шага физики, поэтому нажатия
         // запоминаются до тех пор, пока их не заберёт FixedUpdate.
@@ -82,6 +88,13 @@ public class PlayerInputReader : MonoBehaviour
     {
         bool pressed = spaceLatched;
         spaceLatched = false;
+        return pressed;
+    }
+
+    public bool ConsumeSkip()
+    {
+        bool pressed = skipLatched;
+        skipLatched = false;
         return pressed;
     }
 

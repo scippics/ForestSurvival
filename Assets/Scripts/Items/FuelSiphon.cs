@@ -27,21 +27,33 @@ public class FuelSiphon : MonoBehaviour
         SiphonPressure = 0f;
     }
 
-    public void TickPump(bool buttonHeld, float deltaTime)
+    public void TickPump(bool buttonHeld, float deltaTime, FuelCan can)
     {
         if (buttonHeld)
         {
             SiphonPressure = Mathf.Min(SiphonPressure + PressureRate * deltaTime, MaxPressure);
             if (SiphonPressure >= MaxPressure)
             {
-                Debug.Log("Подавился бензином!");
+                StoryUI.Instance.Say("Подавился бензином!");
+                ForestAudio.Play(ForestSound.Cough, 0.8f);
                 CancelPump();
             }
             return;
         }
 
         if (SiphonPressure >= SuccessMin && SiphonPressure <= SuccessMax)
-            Debug.Log("Топливо перелито");
+        {
+            can.SetLiters(FuelCan.Capacity);
+            StoryDirector.Instance.OnFuelInHands();
+            if (WorldSync.Instance != null)
+                WorldSync.Instance.SendItem(can.GetComponent<Rigidbody>());
+            StoryUI.Instance.Say("Пошло. Канистра полная: " + FuelCan.Capacity + " л.");
+            ForestAudio.Play(ForestSound.Paper, 0.2f);
+        }
+        else
+        {
+            StoryUI.Instance.Say("Не пошло: слишком рано отпустил.");
+        }
         CancelPump();
     }
 

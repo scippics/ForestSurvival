@@ -8,6 +8,10 @@ public class InteractionUI : MonoBehaviour
     const string PromptPush = "F - Толкать машину";
     const string PromptTransfer = "Зажать ЛКМ - Перелить топливо";
     const string PromptHolding = "ЛКМ - Отпустить, ПКМ - Бросить";
+    const string PromptRead = "ЛКМ - Читать";
+    const string PromptCloseNote = "ЛКМ - Убрать записку";
+    const string PromptPour = "Зажать E - Залить в бак: ";
+    const string PromptNoFuel = "Бак пуст: мотор не заведётся\n";
     const string PromptPressure = "Отпустить на 75-95. Давление: ";
     const string PromptEnter = "E - Сесть за руль";
     const string PromptDriving = "E - Выйти, L - Фары, Пробел - Ручник: ";
@@ -113,11 +117,21 @@ public class InteractionUI : MonoBehaviour
         if (seat.IsSeated)
         {
             string driving = PromptDriving + (seat.Vehicle.HandbrakeOn ? "вкл" : "выкл");
+            if (seat.Vehicle.FuelLiters <= 0f)
+                driving = PromptNoFuel + driving;
             return seat.Vehicle.IsOverturned ? PromptOverturned + driving : driving;
         }
 
+        if (StoryUI.Instance.NoteOpen)
+            return PromptCloseNote;
+
         if (hands.HeldSiphon != null && hands.HeldSiphon.IsPumping)
             return PromptPressure + Mathf.FloorToInt(hands.HeldSiphon.SiphonPressure);
+
+        // Сзади машины можно и толкать, и заливать: с канистрой в руках важнее бак.
+        if (aimed && hands.Held != null && hands.Held.TryGetComponent(out FuelCan heldCan) && heldCan.Liters > 0f
+            && InteractionRay.IsFreeVehicle(hit, out VehicleController car) && car.FuelLiters < VehicleController.TankCapacity)
+            return PromptPour + Mathf.RoundToInt(heldCan.Liters) + " л, в баке " + Mathf.RoundToInt(car.FuelLiters) + " л";
 
         // Луч из зоны толкания не может попасть в её триггер: начало луча внутри него.
         // Поэтому подсказка опирается на сам факт нахождения в зоне, где F и работает.
@@ -127,13 +141,24 @@ public class InteractionUI : MonoBehaviour
         if (aimed)
         {
             if (hands.Held == null && InteractionRay.IsPickupable(hit))
-                return PromptTake;
+            {
+                if (hit.rigidbody.TryGetComponent(out NoteItem _))
+                    return PromptRead;
+                return hit.rigidbody.TryGetComponent(out FuelCan aimedCan) ? PromptTake + CanLiters(aimedCan) : PromptTake;
+            }
             if (InteractionRay.IsFuelTransfer(hands.HeldSiphon, hit))
                 return PromptTransfer;
             if (InteractionRay.IsFreeVehicle(hit, out _))
                 return PromptEnter;
         }
-        return hands.Held != null ? PromptHolding : "";
+        if (hands.Held == null)
+            return "";
+        return hands.Held.TryGetComponent(out FuelCan can) ? PromptHolding + CanLiters(can) : PromptHolding;
+    }
+
+    static string CanLiters(FuelCan can)
+    {
+        return " (канистра: " + Mathf.RoundToInt(can.Liters) + " л)";
     }
 
     void OnGUI()
@@ -161,7 +186,9 @@ public class InteractionUI : MonoBehaviour
         {
             promptStyle.alignment = TextAnchor.UpperCenter;
             promptStyle.fontSize = Mathf.RoundToInt(PromptSize * scale);
-            area = new Rect(0f, center.y + PromptOffset * scale, Screen.width, PromptSize * 2.5f * scale);
+            // Записка закрывает центр экрана, поэтому подсказка на это время уходит под неё.
+            float top = StoryUI.Instance.NoteOpen ? Screen.height * 0.91f : center.y + PromptOffset * scale;
+            area = new Rect(0f, top, Screen.width, PromptSize * 2.5f * scale);
         }
 
         Rect shadow = area;

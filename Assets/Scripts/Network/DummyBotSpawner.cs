@@ -5,12 +5,11 @@ using UnityEngine;
 // а модель игрока видна со стороны.
 public static class DummyBotSpawner
 {
-    static readonly Vector3 BotPosition = new Vector3(-2.5f, 0.9f, -7f);
     const float BotYaw = 40f;
 
     public static NetworkObject Spawn(GameObject playerPrefab)
     {
-        GameObject bot = Object.Instantiate(playerPrefab, BotPosition, Quaternion.identity);
+        GameObject bot = Object.Instantiate(playerPrefab, Kordon.BotSpot, Quaternion.identity);
         bot.name = "DummyBot";
         bot.SetActive(true);
 

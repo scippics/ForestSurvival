@@ -43,6 +43,10 @@ public class MainMenu : MonoBehaviour
     Canvas canvas;
     GameObject menuPanel;
     GameObject pausePanel;
+    GameObject settingsPanel;
+    GameObject friendsPanel;
+    Text friendsError;
+    InputField friendAddress;
     Image fade;
     Text title;
     Text savedMessage;
@@ -54,6 +58,8 @@ public class MainMenu : MonoBehaviour
     PlayerCamera view;
     Rigidbody playerBody;
     OptimizedForestGenerator forest;
+    StoryDirector story;
+    PlayerSeat seat;
 
     public MenuButton StartButton { get; private set; }
     public MenuButton LoadButton { get; private set; }
@@ -64,10 +70,11 @@ public class MainMenu : MonoBehaviour
 
     void Awake()
     {
-        var player = FindAnyObjectByType<PlayerSeat>();
-        view = player.GetComponentInChildren<PlayerCamera>();
-        playerBody = player.GetComponent<Rigidbody>();
+        seat = FindAnyObjectByType<PlayerSeat>();
+        view = seat.GetComponentInChildren<PlayerCamera>();
+        playerBody = seat.GetComponent<Rigidbody>();
         forest = FindAnyObjectByType<OptimizedForestGenerator>();
+        story = gameObject.AddComponent<StoryDirector>();
 
         font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         softCircle = CreateSoftCircle();
@@ -76,6 +83,8 @@ public class MainMenu : MonoBehaviour
         CreateEventSystem();
         CreateMenuPanel();
         CreatePausePanel();
+        CreateSettingsPanel();
+        CreateFriendsPanel();
 
         fade = CreateImage(canvas.transform, "Fade", null, Color.black);
         Stretch(fade.rectTransform);
@@ -141,16 +150,22 @@ public class MainMenu : MonoBehaviour
         LoadButton.SetInteractable(hasSave);
         LoadButton.SetHint(hasSave ? SaveSystem.SaveDescription : "нет сохранений");
 
-        HostButton = CreateButton(menuPanel.transform, "ИГРА С ДРУЗЬЯМИ", 420f, null);
-        HostButton.SetInteractable(false);
-        HostButton.SetHint("скоро");
-
-        ExitButton = CreateButton(menuPanel.transform, "ВЫХОД", 350f, Application.Quit);
+        HostButton = CreateButton(menuPanel.transform, "ИГРА С ДРУЗЬЯМИ", 420f, () => ShowSubPanel(friendsPanel));
+        MenuButton settings = CreateButton(menuPanel.transform, "НАСТРОЙКИ", 350f, () => ShowSubPanel(settingsPanel));
+        ExitButton = CreateButton(menuPanel.transform, "ВЫХОД", 280f, Application.Quit);
 
         Text version = CreateText(menuPanel.transform, "Version", "Прототип, версия " + Application.version, 20, HintColor, FontStyle.Normal);
         Place(version.rectTransform, 146f, 70f, 600f, 34f);
 
-        Navigate(StartButton, LoadButton, HostButton, ExitButton);
+        Navigate(StartButton, LoadButton, HostButton, settings, ExitButton);
+
+        // У клиента мир уже идёт на чужом компьютере: начинать и загружать тут нечего.
+        if (!Unity.Netcode.NetworkManager.Singleton.IsServer)
+        {
+            StartButton.GetComponentInChildren<Text>().text = "В ИГРУ";
+            LoadButton.SetInteractable(false);
+            LoadButton.SetHint("игру ведёт хост");
+        }
     }
 
     void CreatePausePanel()
@@ -165,18 +180,187 @@ public class MainMenu : MonoBehaviour
 
         ResumeButton = CreateButton(pausePanel.transform, "ПРОДОЛЖИТЬ", 560f, () => GameFlow.SetState(GameState.Playing));
         SaveButton = CreateButton(pausePanel.transform, "СОХРАНИТЬ", 490f, SaveGame);
-        MenuButton quit = CreateButton(pausePanel.transform, "ВЫЙТИ ИЗ ИГРЫ", 420f, Application.Quit);
+        MenuButton pauseSettings = CreateButton(pausePanel.transform, "НАСТРОЙКИ", 420f, () => ShowSubPanel(settingsPanel));
+        MenuButton quit = CreateButton(pausePanel.transform, "ВЫЙТИ ИЗ ИГРЫ", 350f, Application.Quit);
 
         savedMessage = CreateText(pausePanel.transform, "SavedMessage", "", 24, SubtitleColor, FontStyle.Normal);
-        Place(savedMessage.rectTransform, 146f, 350f, 800f, 40f);
+        Place(savedMessage.rectTransform, 146f, 280f, 800f, 40f);
 
         Text controls = CreateText(pausePanel.transform, "Controls",
-            "WASD - идти или ехать     Пробел - прыжок, ручник     ЛКМ / ПКМ - взять, бросить     E - машина     F - толкать\nT - фонарик     L - фары     R - поставить на колёса     Tab - блокнот",
+            "WASD - идти или ехать     Пробел - прыжок, ручник     ЛКМ / ПКМ - взять, бросить     E - машина, залить бензин     F - толкать\nT - фонарик     L - фары     R - поставить на колёса     Tab - блокнот",
             22, HintColor, FontStyle.Normal);
         Place(controls.rectTransform, 146f, 70f, 1500f, 80f);
 
-        Navigate(ResumeButton, SaveButton, quit);
+        Navigate(ResumeButton, SaveButton, pauseSettings, quit);
+        if (!Unity.Netcode.NetworkManager.Singleton.IsServer)
+        {
+            SaveButton.SetInteractable(false);
+            SaveButton.SetHint("сохраняет хост");
+        }
         pausePanel.SetActive(false);
+    }
+
+    void CreateSettingsPanel()
+    {
+        settingsPanel = CreatePanel("SettingsPanel");
+        Image dim = CreateImage(settingsPanel.transform, "Dim", null, new Color(0.02f, 0.03f, 0.04f, 0.85f));
+        Stretch(dim.rectTransform);
+
+        Text header = CreateText(settingsPanel.transform, "SettingsTitle", "НАСТРОЙКИ", 72, TitleColor, FontStyle.Bold);
+        Place(header.rectTransform, 140f, 760f, 900f, 100f);
+
+        CreateSlider(settingsPanel.transform, "Чувствительность мыши", 620f, GameSettings.MinSensitivity, GameSettings.MaxSensitivity, GameSettings.Sensitivity, value => GameSettings.Sensitivity = value);
+        CreateSlider(settingsPanel.transform, "Громкость", 550f, 0f, 1f, GameSettings.Volume, value => GameSettings.Volume = value);
+
+        MenuButton quality = null;
+        quality = CreateButton(settingsPanel.transform, "", 470f, () =>
+        {
+            GameSettings.Quality = (GameSettings.Quality + 1) % GameSettings.QualityNames.Length;
+            SetQualityLabel(quality);
+        });
+        SetQualityLabel(quality);
+
+        MenuButton screen = null;
+        screen = CreateButton(settingsPanel.transform, "", 400f, () =>
+        {
+            Screen.fullScreen = !Screen.fullScreen;
+            SetScreenLabel(screen, !Screen.fullScreen);
+        });
+        SetScreenLabel(screen, Screen.fullScreen);
+
+        MenuButton back = CreateButton(settingsPanel.transform, "НАЗАД", 300f, CloseSubPanel);
+        Navigate(quality, screen, back);
+        settingsPanel.SetActive(false);
+    }
+
+    static void SetQualityLabel(MenuButton button)
+    {
+        button.GetComponentInChildren<Text>().text = "КАЧЕСТВО: " + GameSettings.QualityNames[GameSettings.Quality];
+    }
+
+    static void SetScreenLabel(MenuButton button, bool fullScreen)
+    {
+        button.GetComponentInChildren<Text>().text = fullScreen ? "ЭКРАН: ВО ВЕСЬ" : "ЭКРАН: В ОКНЕ";
+    }
+
+    void CreateFriendsPanel()
+    {
+        friendsPanel = CreatePanel("FriendsPanel");
+        Image dim = CreateImage(friendsPanel.transform, "Dim", null, new Color(0.02f, 0.03f, 0.04f, 0.88f));
+        Stretch(dim.rectTransform);
+
+        Text header = CreateText(friendsPanel.transform, "FriendsTitle", "ИГРА С ДРУЗЬЯМИ", 72, TitleColor, FontStyle.Bold);
+        Place(header.rectTransform, 140f, 800f, 1200f, 100f);
+
+        string addresses = string.Join(", ", NetworkBootstrap.LocalAddresses());
+        Text host = CreateText(friendsPanel.transform, "HostInfo",
+            "Твой компьютер уже сервер. Адрес в домашней сети: " + addresses + ", порт " + NetworkBootstrap.HostPort + ".\n" +
+            "Друг вводит этот адрес у себя. Windows может спросить разрешение для игры в брандмауэре: нужно разрешить.\n" +
+            "Через интернет: проброс UDP-порта " + NetworkBootstrap.HostPort + " на роутере или общая сеть вроде Radmin VPN.",
+            26, ButtonColor, FontStyle.Normal);
+        Place(host.rectTransform, 146f, 640f, 1640f, 130f);
+
+        Text label = CreateText(friendsPanel.transform, "JoinLabel", "Подключиться к другу:", 30, SubtitleColor, FontStyle.Normal);
+        Place(label.rectTransform, 146f, 540f, 600f, 50f);
+        friendAddress = CreateInput(friendsPanel.transform, 146f, 475f);
+
+        MenuButton connect = CreateButton(friendsPanel.transform, "ПОДКЛЮЧИТЬСЯ", 390f, ConnectToFriend);
+        friendsError = CreateText(friendsPanel.transform, "JoinError", "", 24, SubtitleColor, FontStyle.Normal);
+        Place(friendsError.rectTransform, 146f, 345f, 1200f, 40f);
+
+        MenuButton back = CreateButton(friendsPanel.transform, "НАЗАД", 270f, CloseSubPanel);
+
+        Text limit = CreateText(friendsPanel.transform, "NetLimit",
+            "По сети общие игроки, машина, предметы в руках, время суток, дождь и задача. Толчки предметов и дверь пока у каждого свои.",
+            22, HintColor, FontStyle.Normal);
+        Place(limit.rectTransform, 146f, 70f, 1500f, 40f);
+
+        Navigate(connect, back);
+        friendsPanel.SetActive(false);
+    }
+
+    void ConnectToFriend()
+    {
+        if (!NetworkBootstrap.IsValidAddress(friendAddress.text))
+        {
+            friendsError.text = "Введи адрес, например 192.168.1.20";
+            return;
+        }
+        friendsError.text = "Перезапуск игры...";
+        NetworkBootstrap.RelaunchAsClient(friendAddress.text);
+    }
+
+    void ShowSubPanel(GameObject panel)
+    {
+        menuPanel.SetActive(false);
+        pausePanel.SetActive(false);
+        panel.SetActive(true);
+        EventSystem.current.SetSelectedGameObject(null);
+    }
+
+    void CloseSubPanel()
+    {
+        settingsPanel.SetActive(false);
+        friendsPanel.SetActive(false);
+        bool paused = GameFlow.State == GameState.Paused;
+        pausePanel.SetActive(paused);
+        menuPanel.SetActive(!paused);
+        EventSystem.current.SetSelectedGameObject(paused ? ResumeButton.gameObject : StartButton.gameObject);
+    }
+
+    void CreateSlider(Transform parent, string label, float y, float min, float max, float value, UnityEngine.Events.UnityAction<float> changed)
+    {
+        Text caption = CreateText(parent, label, label, 30, ButtonColor, FontStyle.Normal);
+        Place(caption.rectTransform, 146f, y, 560f, 50f);
+
+        var root = new GameObject("Slider", typeof(RectTransform));
+        root.transform.SetParent(parent, false);
+        Place(root.GetComponent<RectTransform>(), 720f, y + 14f, 520f, 22f);
+
+        Image track = CreateImage(root.transform, "Track", null, new Color(0.2f, 0.21f, 0.2f));
+        Stretch(track.rectTransform);
+
+        Image fill = CreateImage(root.transform, "Fill", null, ButtonHoverColor);
+        fill.raycastTarget = false;
+        fill.rectTransform.sizeDelta = Vector2.zero;
+
+        var handleArea = new GameObject("HandleArea", typeof(RectTransform));
+        handleArea.transform.SetParent(root.transform, false);
+        Stretch(handleArea.GetComponent<RectTransform>());
+        Image handle = CreateImage(handleArea.transform, "Handle", null, TitleColor);
+        handle.rectTransform.sizeDelta = new Vector2(16f, 16f);
+
+        var slider = root.AddComponent<Slider>();
+        slider.fillRect = fill.rectTransform;
+        slider.handleRect = handle.rectTransform;
+        slider.targetGraphic = handle;
+        slider.direction = Slider.Direction.LeftToRight;
+        slider.minValue = min;
+        slider.maxValue = max;
+        slider.value = value;
+        slider.onValueChanged.AddListener(changed);
+    }
+
+    InputField CreateInput(Transform parent, float x, float y)
+    {
+        var root = new GameObject("AddressField", typeof(RectTransform));
+        root.transform.SetParent(parent, false);
+        Place(root.GetComponent<RectTransform>(), x, y, 560f, 56f);
+        Image background = root.AddComponent<Image>();
+        background.color = new Color(0.12f, 0.13f, 0.13f);
+
+        Text placeholder = CreateText(root.transform, "Placeholder", "192.168.1.20", 30, HintColor, FontStyle.Normal);
+        Place(placeholder.rectTransform, 14f, 0f, 530f, 56f);
+        Text typed = CreateText(root.transform, "Typed", "", 30, TitleColor, FontStyle.Normal);
+        Place(typed.rectTransform, 14f, 0f, 530f, 56f);
+        typed.supportRichText = false;
+        typed.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+        var field = root.AddComponent<InputField>();
+        field.textComponent = typed;
+        field.placeholder = placeholder;
+        field.characterLimit = 64;
+        return field;
     }
 
     static void Navigate(params MenuButton[] buttons)
@@ -215,19 +399,21 @@ public class MainMenu : MonoBehaviour
         menuPanel.SetActive(false);
         view.ResetToBody();
 
-        bool wasSeated = false;
         if (load)
-        {
             SaveSystem.Load();
-            wasSeated = FindAnyObjectByType<PlayerSeat>().IsSeated;
-        }
+        else
+            story.Begin();
 
         // Сначала земля вокруг новой позиции, и только потом оживает физика.
         forest.RefreshNow();
-        if (!wasSeated)
+        if (!seat.IsSeated)
             playerBody.isKinematic = false;
-        view.enabled = true;
 
+        // Пролог сам возвращает камеру и управление, когда закончится.
+        if (story.InCutscene)
+            return;
+
+        view.enabled = true;
         GameFlow.SetState(GameState.Playing);
     }
 
@@ -241,6 +427,8 @@ public class MainMenu : MonoBehaviour
     void OnStateChanged(GameState state)
     {
         pausePanel.SetActive(state == GameState.Paused);
+        if (settingsPanel != null)
+            settingsPanel.SetActive(false);
 
         if (state == GameState.Paused)
         {
@@ -368,6 +556,7 @@ public class MainMenu : MonoBehaviour
         button.transition = Selectable.Transition.None;
         if (action != null)
             button.onClick.AddListener(action);
+        button.onClick.AddListener(() => ForestAudio.Play(ForestSound.Click, 0.6f));
 
         Text text = CreateText(root.transform, "Label", label, 38, ButtonColor, FontStyle.Bold);
         Place(text.rectTransform, 0f, 0f, 600f, 62f);

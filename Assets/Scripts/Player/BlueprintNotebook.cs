@@ -15,19 +15,12 @@ public class BlueprintNotebook : MonoBehaviour
     void Update()
     {
         if (input.ConsumeNotebook())
-            PrintRecipes();
+            StoryUI.Instance.ToggleNotebook(unlockedRecipes);
     }
 
     public void AddRecipe(string recipeID)
     {
         if (!unlockedRecipes.Contains(recipeID))
             unlockedRecipes.Add(recipeID);
-    }
-
-    void PrintRecipes()
-    {
-        Debug.Log(unlockedRecipes.Count == 0
-            ? "Блокнот пуст"
-            : "Блокнот: " + string.Join(", ", unlockedRecipes));
     }
 }

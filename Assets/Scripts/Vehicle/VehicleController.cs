@@ -30,14 +30,28 @@ public class VehicleController : MonoBehaviour
     const float MudResistancePerSpeed = 200f;
     const float StiffnessEpsilon = 0.01f;
 
+    public const float TankCapacity = 45f;
+    const float IdleBurn = 0.008f;
+    const float ThrottleBurn = 0.03f;
+    const float LowFuelFraction = 0.15f;
+
     public bool LightsOn { get; private set; }
     public bool HandbrakeOn { get; set; }
     public float CurrentMudDepth { get; private set; }
     public bool IsOverturned => Vector3.Dot(transform.up, Vector3.up) < OverturnedUpDot;
     public PlayerSeat Driver { get; set; }
+    public bool RemoteDriven { get; set; }
+    public bool IsOccupied => Driver != null || RemoteDriven;
+    public float SteerInput => steer;
     public Transform DriverSeat { get; set; }
     public Transform PassengerSeat { get; set; }
     public float ForwardSpeed => Vector3.Dot(body.linearVelocity, transform.forward);
+    public float SteerAngle => currentSteer;
+    public float Throttle => throttle;
+    public bool EngineRunning => IsOccupied && FuelLiters > 0f;
+    public float FuelLiters { get; private set; } = TankCapacity;
+    public float FuelFraction => FuelLiters / TankCapacity;
+    public bool IsLowFuel => FuelFraction < LowFuelFraction;
     public IReadOnlyList<Wheel> Wheels => wheels;
 
     public class Wheel
@@ -107,6 +121,26 @@ public class VehicleController : MonoBehaviour
     public void ReleaseWheelsForPush()
     {
         releasedForPush = true;
+    }
+
+    public void SetFuel(float liters)
+    {
+        FuelLiters = Mathf.Clamp(liters, 0f, TankCapacity);
+    }
+
+    // Возвращает, сколько вошло: лишнее остаётся в канистре.
+    public float AddFuel(float liters)
+    {
+        float accepted = Mathf.Min(liters, TankCapacity - FuelLiters);
+        FuelLiters += accepted;
+        if (WorldSync.Instance != null)
+            WorldSync.Instance.AnnounceFuelAdded(accepted);
+        return accepted;
+    }
+
+    public void AddFuelFromNetwork(float liters)
+    {
+        FuelLiters = Mathf.Min(FuelLiters + liters, TankCapacity);
     }
 
     public void SetDriverInput(Vector2 move)
@@ -217,6 +251,9 @@ public class VehicleController : MonoBehaviour
         ApplyMud();
         ApplyAntiRoll();
 
+        if (EngineRunning)
+            FuelLiters = Mathf.Max(0f, FuelLiters - (IdleBurn + ThrottleBurn * Mathf.Abs(throttle)) * Time.fixedDeltaTime);
+
         float speed = ForwardSpeed;
         float absSpeed = Mathf.Abs(speed);
         float limit = MaxSpeed;
@@ -225,7 +262,7 @@ public class VehicleController : MonoBehaviour
 
         // Газ против движения сначала тормозит машину и только потом включает обратный ход.
         bool opposing = throttle * speed < 0f && absSpeed > OpposingSpeedThreshold;
-        float motor = opposing || HandbrakeOn ? 0f : throttle * MotorTorque * Mathf.Clamp01(1f - absSpeed / limit);
+        float motor = opposing || HandbrakeOn || !EngineRunning ? 0f : throttle * MotorTorque * Mathf.Clamp01(1f - absSpeed / limit);
 
         float brake = RollingResistance;
         if (HandbrakeOn)

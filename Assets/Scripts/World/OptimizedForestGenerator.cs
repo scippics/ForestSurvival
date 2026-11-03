@@ -33,12 +33,25 @@ public class OptimizedForestGenerator : MonoBehaviour
     const float GrassMaxHeight = 1f;
     const float GrassSink = 0.05f;
 
-    const int TreeGridSide = 9;
-    const int MaxTreesPerChunk = 60;
+    const int TreeGridSide = 12;
+    const int MaxTreesPerChunk = 144;
     const float TreeDensityFrequency = 0.035f;
-    const float TreeNoiseMin = 0.2f;
-    const float TreeNoiseMax = 0.5f;
-    const float TreeMaxHeight = 19f;
+    const float TreeNoiseMin = 0.12f;
+    const float TreeNoiseMax = 0.4f;
+    const float TreeMaxHeight = 25f;
+    const float BiomeFrequency = 0.016f;
+
+    const int SpeciesSpruce = 0;
+    const int SpeciesPine = 1;
+    const int SpeciesBirch = 2;
+    const int SpeciesDead = 3;
+    const int SpeciesCount = 4;
+
+    const int SaplingsPerChunk = 60;
+    const int BushesPerChunk = 50;
+    const int StumpsPerChunk = 6;
+    const int LogsPerChunk = 4;
+    const int MaxSolidPerChunk = MaxTreesPerChunk + StumpsPerChunk + LogsPerChunk;
     const float TreeSink = 0.3f;
     const float TrunkModelRadius = 0.13f;
     const float ShadowCullMargin = 12f;
@@ -55,6 +68,9 @@ public class OptimizedForestGenerator : MonoBehaviour
     const float MudNoiseMax = 0.82f;
 
     const float StartClearingRadius = 30f;
+    const double CampCanFillChance = 0.45;
+    const float CampCanMinLiters = 3f;
+    const float CampCanMaxLiters = 14f;
 
     // Поляна целиком лежит в своём чанке, вместе с полосой сглаживания рельефа:
     // тогда соседние чанки не нужно проверять ни для деревьев, ни для высоты.
@@ -68,17 +84,24 @@ public class OptimizedForestGenerator : MonoBehaviour
     const int CampLootMax = 5;
     const float CampLootDropHeight = 0.5f;
 
-    const float DeadTreeChance = 0.1f;
+    const float DeadTreeChance = 0.08f;
     const int RocksPerChunk = 14;
-    const int FernsPerChunk = 110;
+    const int FernsPerChunk = 180;
     const float FernNoiseMin = 0.42f;
 
     public const string TerrainTag = "Terrain";
+    public static float ChunkLength => ChunkSize;
 
     static readonly Color TrunkColor = new Color(0.2f, 0.14f, 0.09f);
     static readonly Color CrownColor = new Color(0.1f, 0.2f, 0.11f);
     static readonly Color GrassColor = new Color(0.17f, 0.19f, 0.11f);
     static readonly Color DeadTrunkColor = new Color(0.17f, 0.15f, 0.13f);
+    static readonly Color PineTrunkColor = new Color(0.25f, 0.17f, 0.12f);
+    static readonly Color PineCrownColor = new Color(0.08f, 0.18f, 0.13f);
+    static readonly Color BirchTrunkColor = new Color(0.72f, 0.7f, 0.64f);
+    static readonly Color BirchCrownColor = new Color(0.24f, 0.27f, 0.08f);
+    static readonly Color BushColor = new Color(0.075f, 0.14f, 0.055f);
+    static readonly Color LogColor = new Color(0.17f, 0.13f, 0.09f);
     static readonly Color FernColor = new Color(0.09f, 0.17f, 0.07f);
     static readonly Color RockColor = new Color(0.27f, 0.27f, 0.26f);
 
@@ -119,10 +142,16 @@ public class OptimizedForestGenerator : MonoBehaviour
         public bool TerrainPending;
         public Matrix4x4[] Trees;
         public int TreeCount;
-        public Matrix4x4[] Crowns;
-        public int CrownCount;
-        public Matrix4x4[] DeadTrees;
-        public int DeadCount;
+        public Matrix4x4[][] Species;
+        public int[] SpeciesCounts;
+        public Matrix4x4[] Saplings;
+        public int SaplingCount;
+        public Matrix4x4[] Bushes;
+        public int BushCount;
+        public Matrix4x4[] Stumps;
+        public int StumpCount;
+        public Matrix4x4[] Logs;
+        public int LogCount;
         public Matrix4x4[] Rocks;
         public int RockCount;
         public Matrix4x4[] Ferns;
@@ -141,6 +170,7 @@ public class OptimizedForestGenerator : MonoBehaviour
     readonly Stack<Matrix4x4[]> batchPool = new Stack<Matrix4x4[]>();
     readonly Stack<TerrainPiece> terrainPool = new Stack<TerrainPiece>();
     readonly List<Rigidbody> trackedBodies = new List<Rigidbody>();
+    public static readonly HashSet<Rigidbody> NetworkFollowed = new HashSet<Rigidbody>();
     readonly Plane[] frustumPlanes = new Plane[6];
     readonly Dictionary<Vector2Int, GameObject> campObjects = new Dictionary<Vector2Int, GameObject>();
 
@@ -151,29 +181,65 @@ public class OptimizedForestGenerator : MonoBehaviour
     readonly Vector4[] terrainTangents = new Vector4[TerrainVertices * TerrainVertices];
     int[] terrainTriangles;
 
-    Mesh trunkMesh, crownMesh, grassMesh, branchMesh, fernMesh, rockMesh;
-    Material trunkMaterial, crownMaterial, grassMaterial, groundMaterial, deadMaterial, fernMaterial, rockMaterial;
+    class TreeKind
+    {
+        public Mesh CrownNear;
+        public Mesh CrownFar;
+        public Material Trunk;
+        public Material Crown;
+    }
+
+    readonly TreeKind[] treeKinds = new TreeKind[SpeciesCount];
+    Mesh trunkMesh, grassMesh, fernMesh, rockMesh, bushMesh, stumpMesh;
+    Material grassMaterial, groundMaterial, fernMaterial, rockMaterial, bushMaterial, stumpMaterial, logMaterial;
     Vector2Int centerChunk;
 
     // В Awake: земля должна появиться раньше первого шага физики, иначе машина и предметы провалятся.
     void Awake()
     {
         trunkMesh = ForestMeshes.BuildTrunk(TrunkModelRadius);
-        crownMesh = ForestMeshes.BuildCrown();
         grassMesh = ForestMeshes.BuildGrass();
-        branchMesh = ForestMeshes.BuildDeadBranches();
+        bushMesh = ForestMeshes.BuildBush();
+        stumpMesh = ForestMeshes.BuildStump(TrunkModelRadius);
         fernMesh = ForestMeshes.BuildFern();
         rockMesh = ForestMeshes.BuildRock();
 
-        trunkMaterial = CreateFoliageMaterial(TrunkColor, 0.3f, 0f);
-        trunkMaterial.SetFloat("_Bark", 1f);
-        trunkMaterial.SetFloat("_Moss", 0.8f);
-        crownMaterial = CreateFoliageMaterial(CrownColor, 0.3f, 0.04f);
-        crownMaterial.SetFloat("_Needles", 1f);
+        Material spruceTrunk = CreateFoliageMaterial(TrunkColor, 0.3f, 0f);
+        spruceTrunk.SetFloat("_Bark", 1f);
+        spruceTrunk.SetFloat("_Moss", 0.8f);
+        Material spruceCrown = CreateFoliageMaterial(CrownColor, 0.3f, 0.04f);
+        spruceCrown.SetFloat("_Needles", 1f);
+        treeKinds[SpeciesSpruce] = new TreeKind { CrownNear = ForestMeshes.BuildCrown(false), CrownFar = ForestMeshes.BuildCrown(true), Trunk = spruceTrunk, Crown = spruceCrown };
+
+        Material pineTrunk = CreateFoliageMaterial(PineTrunkColor, 0.35f, 0f);
+        pineTrunk.SetFloat("_Bark", 1f);
+        pineTrunk.SetFloat("_Moss", 0.5f);
+        Material pineCrown = CreateFoliageMaterial(PineCrownColor, 0.35f, 0.05f);
+        pineCrown.SetFloat("_Needles", 1f);
+        treeKinds[SpeciesPine] = new TreeKind { CrownNear = ForestMeshes.BuildPineCrown(false), CrownFar = ForestMeshes.BuildPineCrown(true), Trunk = pineTrunk, Crown = pineCrown };
+
+        Material birchTrunk = CreateFoliageMaterial(BirchTrunkColor, 0.4f, 0f);
+        birchTrunk.SetFloat("_Birch", 1f);
+        Material birchCrown = CreateFoliageMaterial(BirchCrownColor, 0.4f, 0.07f);
+        birchCrown.SetFloat("_Grass", 0f);
+        birchCrown.SetFloat("_Needles", 1f);
+        treeKinds[SpeciesBirch] = new TreeKind { CrownNear = ForestMeshes.BuildBirchCrown(false), CrownFar = ForestMeshes.BuildBirchCrown(true), Trunk = birchTrunk, Crown = birchCrown };
+
+        Material deadTrunk = CreateFoliageMaterial(DeadTrunkColor, 0.3f, 0f);
+        deadTrunk.SetFloat("_Bark", 1f);
+        Mesh deadBranches = ForestMeshes.BuildDeadBranches();
+        treeKinds[SpeciesDead] = new TreeKind { CrownNear = deadBranches, CrownFar = deadBranches, Trunk = deadTrunk, Crown = deadTrunk };
+
         grassMaterial = CreateFoliageMaterial(GrassColor, 0.08f, 0.03f);
         grassMaterial.SetFloat("_Grass", 1f);
-        deadMaterial = CreateFoliageMaterial(DeadTrunkColor, 0.3f, 0f);
-        deadMaterial.SetFloat("_Bark", 1f);
+        bushMaterial = CreateFoliageMaterial(BushColor, 0.12f, 0.05f);
+        bushMaterial.SetFloat("_Needles", 1f);
+        stumpMaterial = CreateFoliageMaterial(DeadTrunkColor, 0f, 0f);
+        stumpMaterial.SetFloat("_Bark", 1f);
+        stumpMaterial.SetFloat("_Moss", 1f);
+        logMaterial = CreateFoliageMaterial(LogColor, 0f, 0f);
+        logMaterial.SetFloat("_Bark", 1f);
+        logMaterial.SetFloat("_Moss", 1f);
         fernMaterial = CreateFoliageMaterial(FernColor, 0.09f, 0.04f);
         fernMaterial.SetFloat("_Grass", 1f);
         rockMaterial = CreateFoliageMaterial(RockColor, 0f, 0f);
@@ -270,6 +336,14 @@ public class OptimizedForestGenerator : MonoBehaviour
         return Mathf.Abs(x - roadCenterX) < RoadHalfWidth || IsInStartClearing(x, z) || CampInfluence(x, z) > 0f;
     }
 
+    // Двор кордона зарос: трава растёт везде, кроме вытоптанной земли у построек.
+    static bool IsBlockedForGrass(float x, float z, float roadCenterX)
+    {
+        if (Mathf.Abs(x - roadCenterX) < RoadHalfWidth || CampInfluence(x, z) > 0f)
+            return true;
+        return IsInStartClearing(x, z) && Kordon.YardBare(x, z) > 0.2f;
+    }
+
     // Стоянка ставится сбоку от дороги, чтобы её можно было заметить из машины.
     static Camp GetCamp(Vector2Int coord)
     {
@@ -292,6 +366,22 @@ public class OptimizedForestGenerator : MonoBehaviour
 
         CampCache[coord] = camp;
         return camp;
+    }
+
+    // Ближайшая к кордону стоянка на первой просеке: туда ведёт пролог.
+    public static bool FindFirstCampNorth(out Vector3 center)
+    {
+        for (int z = 1; z < 64; z++)
+        {
+            Camp camp = GetCamp(new Vector2Int(0, z));
+            if (camp.Exists)
+            {
+                center = new Vector3(camp.X, TerrainHeight(camp.X, camp.Z), camp.Z);
+                return true;
+            }
+        }
+        center = default;
+        return false;
     }
 
     // 1 — внутри поляны, 0 — за полосой сглаживания. Положительна только у той стоянки,
@@ -411,6 +501,10 @@ public class OptimizedForestGenerator : MonoBehaviour
                 continue;
             }
 
+            // Тело, которое сейчас ведёт другой игрок, движется по сети, а не физикой.
+            if (NetworkFollowed.Contains(body))
+                continue;
+
             bool frozen = ChunkDistance(WorldToChunk(body.position), centerChunk) > NearRadius;
             if (body.isKinematic != frozen)
                 body.isKinematic = frozen;
@@ -427,9 +521,13 @@ public class OptimizedForestGenerator : MonoBehaviour
         var chunk = new Chunk
         {
             Coord = coord,
-            Trees = new Matrix4x4[MaxTreesPerChunk],
-            Crowns = new Matrix4x4[MaxTreesPerChunk],
-            DeadTrees = new Matrix4x4[MaxTreesPerChunk],
+            Trees = new Matrix4x4[MaxSolidPerChunk],
+            Species = new Matrix4x4[SpeciesCount][],
+            SpeciesCounts = new int[SpeciesCount],
+            Saplings = new Matrix4x4[SaplingsPerChunk],
+            Bushes = new Matrix4x4[BushesPerChunk],
+            Stumps = new Matrix4x4[StumpsPerChunk],
+            Logs = new Matrix4x4[LogsPerChunk],
             Rocks = new Matrix4x4[RocksPerChunk],
             Ferns = new Matrix4x4[FernsPerChunk]
         };
@@ -443,6 +541,9 @@ public class OptimizedForestGenerator : MonoBehaviour
         float grassTop = maxHeight + GrassMaxHeight;
         chunk.GrassBounds = new Bounds(center + Vector3.up * (minHeight + grassTop) * 0.5f,
             new Vector3(ChunkSize, grassTop - minHeight, ChunkSize));
+
+        for (int species = 0; species < SpeciesCount; species++)
+            chunk.Species[species] = new Matrix4x4[MaxTreesPerChunk];
 
         GenerateTrees(chunk);
         GenerateGroundCover(chunk);
@@ -545,7 +646,7 @@ public class OptimizedForestGenerator : MonoBehaviour
 
                 // Смещение считается от дороги своего столбца: на границе чанка оно не меняет знак,
                 // и при сглаживании между вершинами не возникает ложная дорога.
-                float bare = Mathf.Max(CampInfluence(x, z), IsInStartClearing(x, z) ? 1f : 0f);
+                float bare = Mathf.Max(CampInfluence(x, z), IsInStartClearing(x, z) ? Kordon.YardBare(x, z) : 0f);
                 terrainColors[index] = new Color32((byte)(MudDepth(x, z) * 255f), (byte)(bare * 255f), 0, 255);
                 terrainRoadOffsets[index] = new Vector2(x - RoadCenterX(chunk.Coord.x, z), 0f);
             }
@@ -611,13 +712,13 @@ public class OptimizedForestGenerator : MonoBehaviour
 
         for (int iz = 0; iz < TreeGridSide; iz++)
         {
-            for (int ix = 0; ix < TreeGridSide && chunk.TreeCount < MaxTreesPerChunk; ix++)
+            for (int ix = 0; ix < TreeGridSide; ix++)
             {
                 float x = minX + (ix + (float)random.NextDouble()) * cell;
                 float z = minZ + (iz + (float)random.NextDouble()) * cell;
                 double roll = random.NextDouble();
-                float height = Mathf.Lerp(10f, TreeMaxHeight, (float)random.NextDouble());
-                float width = Mathf.Lerp(1.8f, 3.2f, (float)random.NextDouble());
+                float heightRoll = (float)random.NextDouble();
+                float widthRoll = (float)random.NextDouble();
                 float yaw = (float)random.NextDouble() * 360f;
 
                 float density = Mathf.PerlinNoise(x * TreeDensityFrequency + NoiseOffset, z * TreeDensityFrequency + NoiseOffset);
@@ -626,17 +727,116 @@ public class OptimizedForestGenerator : MonoBehaviour
                 if (IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)))
                     continue;
 
+                int species = ChooseSpecies(x, z, deadRoll);
+                float height, width;
+                switch (species)
+                {
+                    case SpeciesPine:
+                        height = Mathf.Lerp(15f, TreeMaxHeight, heightRoll);
+                        width = Mathf.Lerp(1.4f, 2.3f, widthRoll);
+                        break;
+                    case SpeciesBirch:
+                        height = Mathf.Lerp(9f, 15f, heightRoll);
+                        width = Mathf.Lerp(0.75f, 1.25f, widthRoll);
+                        break;
+                    default:
+                        height = Mathf.Lerp(10f, 19f, heightRoll);
+                        width = Mathf.Lerp(1.8f, 3.2f, widthRoll);
+                        break;
+                }
+
                 // Ствол немного утоплен: на склоне его основание не должно висеть над землёй.
                 Matrix4x4 tree = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - TreeSink, z),
                     Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width));
                 chunk.Trees[chunk.TreeCount++] = tree;
-
-                // Коллайдеры и стволы общие; сухое дерево отличается лишь тем, что на нём сучья вместо кроны.
-                if (deadRoll.NextDouble() < DeadTreeChance)
-                    chunk.DeadTrees[chunk.DeadCount++] = tree;
-                else
-                    chunk.Crowns[chunk.CrownCount++] = tree;
+                chunk.Species[species][chunk.SpeciesCounts[species]++] = tree;
             }
+        }
+    }
+
+    // Шум делит лес на участки: ельник, сосновые гривы на сухом и светлые березняки.
+    static int ChooseSpecies(float x, float z, System.Random roll)
+    {
+        double chance = roll.NextDouble();
+        if (chance < DeadTreeChance)
+            return SpeciesDead;
+
+        float biome = Mathf.PerlinNoise(x * BiomeFrequency + NoiseOffset * 2f, z * BiomeFrequency + NoiseOffset);
+        double spread = roll.NextDouble();
+        if (biome > 0.58f)
+            return spread < 0.72 ? SpeciesPine : SpeciesSpruce;
+        if (biome < 0.4f)
+            return spread < 0.62 ? SpeciesBirch : SpeciesSpruce;
+        return spread < 0.8 ? SpeciesSpruce : spread < 0.9 ? SpeciesPine : SpeciesBirch;
+    }
+
+    void GenerateUndergrowth(Chunk chunk, System.Random random)
+    {
+        float minX = (chunk.Coord.x - 0.5f) * ChunkSize;
+        float minZ = (chunk.Coord.y - 0.5f) * ChunkSize;
+
+        // Подрост: маленькие ёлки сквозь них можно пройти, поэтому у них нет коллайдера.
+        for (int i = 0; i < SaplingsPerChunk; i++)
+        {
+            float x = minX + (float)random.NextDouble() * ChunkSize;
+            float z = minZ + (float)random.NextDouble() * ChunkSize;
+            float height = Mathf.Lerp(1.5f, 5f, (float)random.NextDouble());
+            float yaw = (float)random.NextDouble() * 360f;
+            if (IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)))
+                continue;
+            float width = height * Mathf.Lerp(0.2f, 0.3f, (float)random.NextDouble());
+            chunk.Saplings[chunk.SaplingCount++] = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - 0.05f, z),
+                Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width));
+        }
+
+        for (int i = 0; i < BushesPerChunk; i++)
+        {
+            float x = minX + (float)random.NextDouble() * ChunkSize;
+            float z = minZ + (float)random.NextDouble() * ChunkSize;
+            float size = Mathf.Lerp(0.8f, 2f, (float)random.NextDouble());
+            float yaw = (float)random.NextDouble() * 360f;
+            if (IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)))
+                continue;
+            chunk.Bushes[chunk.BushCount++] = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - 0.1f, z),
+                Quaternion.Euler(0f, yaw, 0f), new Vector3(size, size * 0.8f, size));
+        }
+
+        // Пни и упавшие стволы твёрдые: их коллайдеры идут вместе с деревьями.
+        for (int i = 0; i < StumpsPerChunk; i++)
+        {
+            float x = minX + (float)random.NextDouble() * ChunkSize;
+            float z = minZ + (float)random.NextDouble() * ChunkSize;
+            float width = Mathf.Lerp(1.6f, 3f, (float)random.NextDouble());
+            float height = Mathf.Lerp(0.4f, 0.9f, (float)random.NextDouble());
+            float yaw = (float)random.NextDouble() * 360f;
+            if (IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)))
+                continue;
+            Matrix4x4 stump = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) - 0.05f, z), Quaternion.Euler(0f, yaw, 0f), new Vector3(width, height, width));
+            chunk.Stumps[chunk.StumpCount++] = stump;
+            chunk.Trees[chunk.TreeCount++] = stump;
+        }
+
+        for (int i = 0; i < LogsPerChunk; i++)
+        {
+            float x = minX + (float)random.NextDouble() * ChunkSize;
+            float z = minZ + (float)random.NextDouble() * ChunkSize;
+            float length = Mathf.Lerp(5f, 11f, (float)random.NextDouble());
+            float width = Mathf.Lerp(1.5f, 2.6f, (float)random.NextDouble());
+            float yaw = (float)random.NextDouble() * 360f;
+
+            // Оба конца должны лежать на месте для растений, иначе бревно перегородит дорогу.
+            Quaternion rotation = Quaternion.Euler(0f, yaw, 0f) * Quaternion.Euler(88f, 0f, 0f);
+            Vector3 along = rotation * Vector3.up;
+            float endX = x + along.x * length;
+            float endZ = z + along.z * length;
+            bool insideChunk = endX > minX && endX < minX + ChunkSize && endZ > minZ && endZ < minZ + ChunkSize;
+            if (!insideChunk || IsBlockedForPlants(x, z, RoadCenterX(chunk.Coord.x, z)) || IsBlockedForPlants(endX, endZ, RoadCenterX(chunk.Coord.x, endZ)))
+                continue;
+
+            float lift = TrunkModelRadius * width * 0.6f;
+            Matrix4x4 log = Matrix4x4.TRS(new Vector3(x, SampleHeight(chunk, x, z) + lift, z), rotation, new Vector3(width, length, width));
+            chunk.Logs[chunk.LogCount++] = log;
+            chunk.Trees[chunk.TreeCount++] = log;
         }
     }
 
@@ -644,6 +844,7 @@ public class OptimizedForestGenerator : MonoBehaviour
     void GenerateGroundCover(Chunk chunk)
     {
         var random = new System.Random(ChunkSeed(chunk.Coord, 3));
+        GenerateUndergrowth(chunk, random);
         float minX = (chunk.Coord.x - 0.5f) * ChunkSize;
         float minZ = (chunk.Coord.y - 0.5f) * ChunkSize;
 
@@ -725,7 +926,12 @@ public class OptimizedForestGenerator : MonoBehaviour
             // Канистра лежит на боку или стоит: разбросано как попало, а не выставлено.
             Quaternion rotation = Quaternion.Euler(random.Next(2) * 90f, (float)random.NextDouble() * 360f, 0f);
             var position = new Vector3(x, TerrainHeight(x, z) + CampLootDropHeight, z);
-            Track(ProceduralModels.CreateLoot(lootName, position, rotation).GetComponent<Rigidbody>());
+            GameObject loot = ProceduralModels.CreateLoot(lootName, position, rotation);
+            Track(loot.GetComponent<Rigidbody>());
+
+            // Брошенные канистры редко бывают полными.
+            if (loot.TryGetComponent(out FuelCan can) && random.NextDouble() < CampCanFillChance)
+                can.SetLiters(Mathf.Lerp(CampCanMinLiters, CampCanMaxLiters, (float)random.NextDouble()));
         }
     }
 
@@ -794,7 +1000,7 @@ public class OptimizedForestGenerator : MonoBehaviour
         }
 
         Vector3 scale = tree.lossyScale;
-        capsule.transform.position = tree.GetPosition();
+        capsule.transform.SetPositionAndRotation(tree.GetPosition(), tree.rotation);
         capsule.radius = TrunkModelRadius * scale.x;
         capsule.height = scale.y;
         capsule.center = Vector3.up * scale.y * 0.5f;
@@ -842,7 +1048,7 @@ public class OptimizedForestGenerator : MonoBehaviour
                 float clump = Mathf.PerlinNoise(x * GrassClumpFrequency + NoiseOffset, z * GrassClumpFrequency + NoiseOffset);
                 if (roll >= Mathf.InverseLerp(GrassNoiseMin, GrassNoiseMax, clump))
                     continue;
-                if (IsBlockedForPlants(x, z, roadCenter))
+                if (IsBlockedForGrass(x, z, roadCenter))
                     continue;
 
                 float height = Mathf.Lerp(0.35f, 0.85f, clump) * Mathf.Lerp(0.8f, 1.2f, (float)random.NextDouble());
@@ -864,6 +1070,44 @@ public class OptimizedForestGenerator : MonoBehaviour
         chunk.GrassCount++;
     }
 
+    // Дальше ближней сетки всё скрыто туманом: крона проще, а теней туда не дотянется.
+    void DrawTrees(Chunk chunk)
+    {
+        bool near = ChunkDistance(chunk.Coord, centerChunk) <= NearRadius;
+        ShadowCastingMode shadows = near ? ShadowCastingMode.On : ShadowCastingMode.Off;
+
+        for (int species = 0; species < SpeciesCount; species++)
+        {
+            int count = chunk.SpeciesCounts[species];
+            if (count == 0)
+                continue;
+            TreeKind kind = treeKinds[species];
+            Graphics.DrawMeshInstanced(trunkMesh, 0, kind.Trunk, chunk.Species[species], count, null, shadows, near);
+            Graphics.DrawMeshInstanced(near ? kind.CrownNear : kind.CrownFar, 0, kind.Crown, chunk.Species[species], count, null, shadows, near);
+        }
+
+        if (chunk.RockCount > 0)
+            Graphics.DrawMeshInstanced(rockMesh, 0, rockMaterial, chunk.Rocks, chunk.RockCount, null, shadows, near);
+
+        if (chunk.SaplingCount > 0)
+        {
+            TreeKind spruce = treeKinds[SpeciesSpruce];
+            Graphics.DrawMeshInstanced(spruce.CrownFar, 0, spruce.Crown, chunk.Saplings, chunk.SaplingCount, null, shadows, near);
+        }
+
+        if (!near)
+            return;
+
+        if (chunk.FernCount > 0)
+            Graphics.DrawMeshInstanced(fernMesh, 0, fernMaterial, chunk.Ferns, chunk.FernCount, null, ShadowCastingMode.Off, true);
+        if (chunk.BushCount > 0)
+            Graphics.DrawMeshInstanced(bushMesh, 0, bushMaterial, chunk.Bushes, chunk.BushCount, null, ShadowCastingMode.On, true);
+        if (chunk.StumpCount > 0)
+            Graphics.DrawMeshInstanced(stumpMesh, 0, stumpMaterial, chunk.Stumps, chunk.StumpCount, null, ShadowCastingMode.On, true);
+        if (chunk.LogCount > 0)
+            Graphics.DrawMeshInstanced(trunkMesh, 0, logMaterial, chunk.Logs, chunk.LogCount, null, ShadowCastingMode.On, true);
+    }
+
     void Draw(Camera view)
     {
         GeometryUtility.CalculateFrustumPlanes(view, frustumPlanes);
@@ -874,17 +1118,9 @@ public class OptimizedForestGenerator : MonoBehaviour
 
         foreach (Chunk chunk in chunks.Values)
         {
-            if (chunk.TreeCount > 0 && GeometryUtility.TestPlanesAABB(frustumPlanes, chunk.TreeBounds))
+            if (GeometryUtility.TestPlanesAABB(frustumPlanes, chunk.TreeBounds))
             {
-                Graphics.DrawMeshInstanced(trunkMesh, 0, trunkMaterial, chunk.Trees, chunk.TreeCount, null, ShadowCastingMode.On, true);
-                if (chunk.CrownCount > 0)
-                    Graphics.DrawMeshInstanced(crownMesh, 0, crownMaterial, chunk.Crowns, chunk.CrownCount, null, ShadowCastingMode.On, true);
-                if (chunk.DeadCount > 0)
-                    Graphics.DrawMeshInstanced(branchMesh, 0, deadMaterial, chunk.DeadTrees, chunk.DeadCount, null, ShadowCastingMode.On, true);
-                if (chunk.RockCount > 0)
-                    Graphics.DrawMeshInstanced(rockMesh, 0, rockMaterial, chunk.Rocks, chunk.RockCount, null, ShadowCastingMode.On, true);
-                if (chunk.FernCount > 0 && ChunkDistance(chunk.Coord, centerChunk) <= NearRadius)
-                    Graphics.DrawMeshInstanced(fernMesh, 0, fernMaterial, chunk.Ferns, chunk.FernCount, null, ShadowCastingMode.Off, true);
+                DrawTrees(chunk);
                 treeChunksDrawn++;
             }
 

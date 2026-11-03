@@ -12,17 +12,24 @@ public class PlayerAvatar : NetworkBehaviour
     readonly NetworkVariable<Vector2> look = new NetworkVariable<Vector2>(
         Vector2.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
+    readonly NetworkVariable<bool> seated = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
     // Бот принадлежит серверу, как и хост: отличить своего игрока можно только вместе с IsPlayerObject.
     public bool IsLocal => IsOwner && NetworkObject.IsPlayerObject;
+    public bool IsSeatedNetwork => seated.Value;
 
     Transform bodyPivot;
     Transform headPivot;
     PlayerCamera view;
+    PlayerSeat seat;
+    CapsuleCollider capsule;
     float shownYaw;
     float shownPitch;
 
     void Awake()
     {
+        capsule = GetComponent<CapsuleCollider>();
         bodyPivot = transform.Find(ProceduralModels.MannequinName);
         headPivot = bodyPivot.Find(ProceduralModels.MannequinHeadName);
     }
@@ -31,6 +38,7 @@ public class PlayerAvatar : NetworkBehaviour
     {
         var body = GetComponent<Rigidbody>();
         ProceduralModels.PaintMannequin(bodyPivot, NetworkObject.IsPlayerObject ? OwnerClientId : ulong.MaxValue);
+        gameObject.AddComponent<CharacterAnimator>();
 
         if (!IsLocal)
         {
@@ -45,6 +53,7 @@ public class PlayerAvatar : NetworkBehaviour
 
         RuntimeBootstrapper.BuildLocalRig(gameObject);
         view = GetComponentInChildren<PlayerCamera>();
+        seat = GetComponent<PlayerSeat>();
         RuntimeBootstrapper.OnLocalPlayerReady();
     }
 
@@ -56,6 +65,13 @@ public class PlayerAvatar : NetworkBehaviour
             var current = new Vector2(angles.y, Mathf.DeltaAngle(0f, angles.x));
             if (Mathf.Abs(Mathf.DeltaAngle(look.Value.x, current.x)) > LookSendThreshold || Mathf.Abs(current.y - look.Value.y) > LookSendThreshold)
                 look.Value = current;
+            if (seated.Value != seat.IsSeated)
+                seated.Value = seat.IsSeated;
+        }
+        else if (!IsLocal)
+        {
+            // Чужой водитель сидит внутри кабины: его капсула не должна толкать машину.
+            capsule.enabled = !seated.Value;
         }
 
         float blend = 1f - Mathf.Exp(-LookSmoothing * Time.deltaTime);

@@ -13,6 +13,17 @@ public class PlayerSeat : MonoBehaviour
     public bool IsSeated => Vehicle != null;
     public PushableVehicle PushZone { get; set; }
     public PlayerInputReader Input { get; private set; }
+    public bool IsPouring { get; private set; }
+
+    const float SwayPerAcceleration = 0.006f;
+    const float SwayMax = 0.06f;
+    const float SwayResponse = 6f;
+    const float RoadShakePerSpeed = 0.00035f;
+    const float RoadShakeFrequency = 17f;
+    const float PourLitersPerSecond = 4f;
+
+    Vector3 lastVehicleVelocity;
+    Vector3 sway;
 
     Rigidbody body;
     CapsuleCollider capsule;
@@ -33,24 +44,54 @@ public class PlayerSeat : MonoBehaviour
     void Update()
     {
         if (IsSeated)
+        {
             Vehicle.SetDriverInput(Input.Move);
+            UpdateSway();
+        }
+    }
+
+    void UpdateSway()
+    {
+        float dt = Time.deltaTime;
+        if (dt <= 0f)
+            return;
+
+        Vector3 velocity = Vehicle.GetComponent<Rigidbody>().linearVelocity;
+        Vector3 acceleration = Vehicle.transform.InverseTransformDirection((velocity - lastVehicleVelocity) / dt);
+        lastVehicleVelocity = velocity;
+
+        Vector3 target = Vector3.ClampMagnitude(-acceleration * SwayPerAcceleration, SwayMax);
+        sway = Vector3.Lerp(sway, target, 1f - Mathf.Exp(-SwayResponse * dt));
+
+        // Дрожь от дороги растёт со скоростью.
+        float shake = velocity.magnitude * RoadShakePerSpeed;
+        float t = Time.time * RoadShakeFrequency;
+        Vector3 road = new Vector3(Mathf.PerlinNoise(t, 3.1f) - 0.5f, Mathf.PerlinNoise(7.7f, t) - 0.5f, 0f) * (shake * 2f);
+        view.SetSeatSway(sway + road);
     }
 
     void FixedUpdate()
     {
         // Ручник защёлкивается и остаётся после выхода: машину можно оставить на склоне.
         if (IsSeated && Input.ConsumeSpace())
+        {
             Vehicle.HandbrakeOn = !Vehicle.HandbrakeOn;
+            ForestAudio.Play(ForestSound.Ratchet, 0.6f);
+        }
 
         bool headlightsPressed = Input.ConsumeHeadlights();
         if (IsSeated && headlightsPressed)
+        {
             Vehicle.SetLights(!Vehicle.LightsOn);
+            ForestAudio.Play(ForestSound.Click, 0.5f);
+        }
 
         bool recoverPressed = Input.ConsumeRecover();
         if (IsSeated && recoverPressed && Vehicle.IsOverturned)
             Vehicle.RecoverUpright();
 
-        if (!Input.ConsumeInteract())
+        bool interactPressed = Input.ConsumeInteract();
+        if (TryPour() || !interactPressed)
             return;
 
         if (IsSeated)
@@ -59,8 +100,28 @@ public class PlayerSeat : MonoBehaviour
             Enter(target);
     }
 
+    // С полной канистрой в руках E у машины льёт в бак: садиться с ней незачем, пока бак не полон.
+    bool TryPour()
+    {
+        FuelCan can = null;
+        VehicleController target = null;
+        bool canPour = !IsSeated && hands.Held != null && hands.Held.TryGetComponent(out can) && can.Liters > 0f
+            && InteractionRay.Cast(view.transform, out RaycastHit hit) && InteractionRay.IsFreeVehicle(hit, out target)
+            && target.FuelLiters < VehicleController.TankCapacity;
+
+        IsPouring = canPour && Input.InteractHeld;
+        if (IsPouring)
+        {
+            float poured = target.AddFuel(Mathf.Min(PourLitersPerSecond * Time.fixedDeltaTime, can.Liters));
+            can.SetLiters(can.Liters - poured);
+        }
+        ForestAudio.SetPouring(IsPouring);
+        return canPour;
+    }
+
     public void Enter(VehicleController target)
     {
+        ForestAudio.Play(ForestSound.Door, 0.7f);
         hands.ReleaseHeld();
         hands.enabled = false;
         movement.enabled = false;
@@ -79,19 +140,25 @@ public class PlayerSeat : MonoBehaviour
 
         target.Driver = this;
         Vehicle = target;
+        if (WorldSync.Instance != null)
+            WorldSync.Instance.SetLocalDriver(true);
 
         if (DayNightCycle.IsDark)
             target.SetLights(true);
     }
 
-    void Exit()
+    public void Exit()
     {
         if (!TryFindExit(out Vector3 exit))
             return;
 
+        ForestAudio.Play(ForestSound.Door, 0.7f);
+
         Rigidbody vehicleBody = Vehicle.GetComponent<Rigidbody>();
         Vehicle.SetDriverInput(Vector2.zero);
         Vehicle.Driver = null;
+        if (WorldSync.Instance != null)
+            WorldSync.Instance.SetLocalDriver(false);
 
         view.ExitSeat(Vehicle.transform.eulerAngles.y);
         transform.SetParent(null, false);

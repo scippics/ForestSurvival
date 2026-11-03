@@ -68,6 +68,13 @@ public class PlayerHands : MonoBehaviour
         if (!input.ConsumeGrab())
             return;
 
+        // Пока записка перед глазами, клик только убирает её.
+        if (StoryUI.Instance.NoteOpen)
+        {
+            StoryUI.Instance.CloseNote();
+            return;
+        }
+
         bool aimed = InteractionRay.Cast(view, out RaycastHit hit);
         if (Held == null)
         {
@@ -91,7 +98,7 @@ public class PlayerHands : MonoBehaviour
             return;
 
         if (InteractionRay.Cast(view, out RaycastHit hit) && InteractionRay.IsFuelTransfer(HeldSiphon, hit))
-            HeldSiphon.TickPump(input.GrabHeld, Time.fixedDeltaTime);
+            HeldSiphon.TickPump(input.GrabHeld, Time.fixedDeltaTime, hit.rigidbody.GetComponent<FuelCan>());
         else
             HeldSiphon.CancelPump();
     }
@@ -101,12 +108,27 @@ public class PlayerHands : MonoBehaviour
         if (target.TryGetComponent(out BlueprintItem blueprint))
         {
             notebook.AddRecipe(blueprint.recipeID);
+            if (WorldSync.Instance != null)
+                WorldSync.Instance.AnnounceRecipe(blueprint.name, blueprint.recipeID);
             Destroy(blueprint.gameObject);
+            ForestAudio.Play(ForestSound.Paper, 0.7f);
+            StoryUI.Instance.Say("Чертёж в блокноте. Tab - открыть.");
+            return;
+        }
+
+        if (target.TryGetComponent(out NoteItem note))
+        {
+            StoryUI.Instance.ShowNote(note.text);
+            ForestAudio.Play(ForestSound.Paper, 0.8f);
+            StoryDirector.Instance.OnNoteRead(note.id);
             return;
         }
 
         Held = target;
         HeldSiphon = target.GetComponent<FuelSiphon>();
+        ForestAudio.Play(ForestSound.Click, 0.25f);
+        if (target.TryGetComponent(out FuelCan can) && can.Liters > 0f)
+            StoryDirector.Instance.OnFuelInHands();
         heldRotationOffset = Quaternion.Inverse(holdPosition.rotation) * target.rotation;
 
         savedCollisionMode = target.collisionDetectionMode;

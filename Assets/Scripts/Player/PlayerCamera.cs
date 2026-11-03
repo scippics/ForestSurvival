@@ -5,7 +5,6 @@ using UnityEngine;
 public class PlayerCamera : MonoBehaviour
 {
     const float MaxPitch = 85f;
-    const float Sensitivity = 0.1f;
     const float SeatedMaxYaw = 120f;
     const float SeatedMaxPitchUp = 35f;
     const float SeatedMaxPitchDown = 60f;
@@ -30,12 +29,14 @@ public class PlayerCamera : MonoBehaviour
     public Light Flashlight { get; private set; }
     public float Yaw { get; private set; }
     public float Pitch { get; private set; }
+    public Vector3 RestPosition => restPosition;
 
     PlayerInputReader input;
     PlayerMovement movement;
     Vector3 restPosition;
     float bobPhase;
     float bobAmount;
+    Vector3 seatSway;
 
     void Awake()
     {
@@ -64,8 +65,20 @@ public class PlayerCamera : MonoBehaviour
         movement = GetComponentInParent<PlayerMovement>();
     }
 
+    // Голова водителя отстаёт от кузова: на тормозе и в поворотах взгляд чуть уходит.
+    public void SetSeatSway(Vector3 sway)
+    {
+        seatSway = sway;
+    }
+
     void UpdateHeadBob()
     {
+        if (IsSeated)
+        {
+            transform.localPosition = restPosition + seatSway;
+            return;
+        }
+
         float speed = movement.GroundSpeed;
         bool burdened = movement.IsBurdened;
 
@@ -120,7 +133,7 @@ public class PlayerCamera : MonoBehaviour
         if (input.ConsumeFlashlight())
             Flashlight.enabled = !Flashlight.enabled;
 
-        Vector2 delta = input.LookDelta * Sensitivity;
+        Vector2 delta = input.LookDelta * GameSettings.Sensitivity;
         if (IsSeated)
         {
             Yaw = Mathf.Clamp(Yaw + delta.x, -SeatedMaxYaw, SeatedMaxYaw);

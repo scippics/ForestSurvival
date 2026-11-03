@@ -11,6 +11,7 @@ public class DayNightCycle : MonoBehaviour
     const float AmbientSkyFromFog = 2.3f;
     const float AmbientEquatorFromFog = 1.7f;
     const float AmbientGroundFromFog = 0.9f;
+    const float CabinFillFromFog = 1.25f;
     const float DarkSunHeight = 0.1f;
 
     static readonly Color SunColor = new Color(1f, 0.93f, 0.8f);
@@ -27,6 +28,7 @@ public class DayNightCycle : MonoBehaviour
     static readonly int SunColorId = Shader.PropertyToID("_ForestSunColor");
     static readonly int SkyZenithId = Shader.PropertyToID("_ForestSkyZenith");
     static readonly int NightId = Shader.PropertyToID("_ForestNight");
+    static readonly int CabinFillId = Shader.PropertyToID("_ForestCabinFill");
 
     public float dayLengthSeconds = 600f;
 
@@ -77,6 +79,7 @@ public class DayNightCycle : MonoBehaviour
         Shader.SetGlobalVector(SunDirectionId, -transform.forward);
         Shader.SetGlobalVector(SunColorId, sun.color.linear * sun.intensity);
         Shader.SetGlobalColor(SkyZenithId, zenith);
+        Shader.SetGlobalColor(CabinFillId, fog * CabinFillFromFog + MoonAmbient * 0.2f);
         Shader.SetGlobalFloat(NightId, Mathf.InverseLerp(0.05f, -0.2f, height));
     }
 }

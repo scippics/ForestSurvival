@@ -14,6 +14,7 @@ Shader "Forest/CustomWindFoliage"
         _Needles ("Needles", Range(0, 1)) = 0
         _Grass ("Grass", Range(0, 1)) = 0
         _Moss ("Moss", Range(0, 1)) = 0
+        _Birch ("Birch Bark", Range(0, 1)) = 0
     }
     SubShader
     {
@@ -36,6 +37,7 @@ Shader "Forest/CustomWindFoliage"
             float4 color : COLOR;
             float variation;
             float height;
+            float2 treeOrigin;
         };
 
         sampler2D _ForestNoise;
@@ -45,7 +47,7 @@ Shader "Forest/CustomWindFoliage"
         float _WindStrength;
         float _WindSpeed;
         float _FlutterStrength;
-        half _Bark, _Needles, _Grass, _Moss;
+        half _Bark, _Needles, _Grass, _Moss, _Birch;
 
         UNITY_INSTANCING_BUFFER_START(FoliageProps)
             UNITY_DEFINE_INSTANCED_PROP(fixed4, _Color)
@@ -78,6 +80,7 @@ Shader "Forest/CustomWindFoliage"
             // Свой оттенок у каждого экземпляра: лес не выглядит копией одного дерева.
             o.variation = frac(sin(dot(origin.xz, float2(12.9898, 78.233))) * 43758.5453);
             o.height = height;
+            o.treeOrigin = origin.xz;
         }
 
         void surf(Input IN, inout SurfaceOutputStandard o)
@@ -96,10 +99,25 @@ Shader "Forest/CustomWindFoliage"
                 albedo *= 0.55 + 0.9 * fibre;
             }
 
+            if (_Birch > 0)
+            {
+                // Белая кора с короткими чёрными поперечными штрихами, у комля темнее.
+                float dash = tex2D(_ForestNoise, float2(world.y * 0.11, (world.x + world.z) * 0.035)).a;
+                albedo = lerp(albedo, float3(0.012, 0.011, 0.01), smoothstep(0.6, 0.68, dash));
+                albedo *= lerp(0.45, 1.0, saturate(IN.height * 7.0));
+            }
+
             if (_Needles > 0)
             {
+                // Хвоя идёт от ствола наружу, поэтому полосы расходятся лучами вокруг дерева.
+                float2 fromAxis = world.xz - IN.treeOrigin;
+                float2 around = fromAxis / max(length(fromAxis), 0.05);
+                float rays = tex2D(_ForestNoise, float2((around.x * 1.3 + around.y * 0.9) * 1.9 + IN.variation, world.y * 0.045)).a;
                 float streak = tex2D(_ForestNoise, world.xz * 1.6 + world.y * 0.9).b;
-                albedo *= 0.72 + 0.56 * streak;
+                albedo *= (0.5 + 1.0 * rays) * (0.85 + 0.3 * streak);
+
+                // Нижняя сторона лап темнее верхней: свет приходит сверху.
+                albedo *= lerp(0.55, 1.0, saturate(IN.worldNormal.y * 0.8 + 0.55));
                 albedo = lerp(albedo, albedo * float3(1.5, 1.6, 1.1) + 0.006, tip * 0.7);
             }
 

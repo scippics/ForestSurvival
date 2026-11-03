@@ -27,7 +27,9 @@ public static class InteractionRay
     // Шланг в руках, канистра под прицелом и источник рядом: ЛКМ качает, а не отпускает шланг.
     public static bool IsFuelTransfer(FuelSiphon siphon, RaycastHit hit)
     {
-        return siphon != null && hit.collider.CompareTag(JerrycanTag) && siphon.IsNearFuelSource();
+        return siphon != null && hit.collider.CompareTag(JerrycanTag)
+               && hit.rigidbody.TryGetComponent(out FuelCan can) && !can.IsFull
+               && siphon.IsNearFuelSource();
     }
 
     // Точка прицела раскрывается только там, где действие сейчас действительно доступно:
@@ -47,6 +49,6 @@ public static class InteractionRay
         vehicle = null;
         return hit.rigidbody != null
                && hit.rigidbody.TryGetComponent(out vehicle)
-               && vehicle.Driver == null;
+               && !vehicle.IsOccupied;
     }
 }

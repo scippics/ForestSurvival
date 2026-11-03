@@ -4,7 +4,8 @@ public enum GameState
 {
     Menu,
     Playing,
-    Paused
+    Paused,
+    Cutscene
 }
 
 // Общее состояние игры: от него зависят ввод, курсор и подсказки.
@@ -17,7 +18,7 @@ public static class GameFlow
     public static void SetState(GameState state)
     {
         State = state;
-        bool playing = state == GameState.Playing;
+        bool playing = state == GameState.Playing || state == GameState.Cutscene;
         Cursor.lockState = playing ? CursorLockMode.Locked : CursorLockMode.None;
         Cursor.visible = !playing;
 

@@ -34,6 +34,7 @@ Shader "Forest/Ground"
         sampler2D _ForestNoise;
         fixed4 _MossColor, _LitterColor, _SoilColor, _DirtColor, _RoadColor, _MudColor;
         float _RoadHalfWidth;
+        float _ForestRain;
 
         void vert(inout appdata_full v, out Input o)
         {
@@ -66,8 +67,8 @@ Shader "Forest/Ground"
             float rut = smoothstep(0.62, 0.14, abs(abs(offset) - 0.98));
             float crown = smoothstep(0.55, 0.1, abs(offset)) * smoothstep(0.35, 0.6, fine);
 
-            float wet = saturate(depth * 0.9 + rut * 0.45 + (patches - 0.5) * 0.7);
-            float puddle = smoothstep(0.62, 0.74, depth * 0.55 + rut * 0.34 + (patches - 0.5) * 0.55) * road;
+            float wet = saturate(depth * 0.9 + rut * 0.45 + (patches - 0.5) * 0.7 + _ForestRain * 0.35);
+            float puddle = smoothstep(0.62 - _ForestRain * 0.16, 0.74 - _ForestRain * 0.16, depth * 0.55 + rut * 0.34 + (patches - 0.5) * 0.55) * road;
             float3 roadAlbedo = lerp(_RoadColor.rgb * (0.88 + 0.24 * grit), _MudColor.rgb, wet);
             roadAlbedo = lerp(roadAlbedo, _MossColor.rgb * 0.8, crown * (1.0 - wet) * 0.8);
 
@@ -75,6 +76,10 @@ Shader "Forest/Ground"
             o.Albedo *= 1.0 - puddle * 0.45;
             o.Smoothness = lerp(lerp(0.06, 0.12, bare), lerp(0.12, 0.42, wet), road);
             o.Smoothness = lerp(o.Smoothness, 0.93, puddle);
+
+            // В дождь земля темнеет и блестит везде, а не только на дороге.
+            o.Albedo *= 1.0 - _ForestRain * 0.28;
+            o.Smoothness = saturate(o.Smoothness + _ForestRain * 0.22);
 
             // Мелкий рельеф из разности шума; в луже поверхность гладкая.
             const float texel = 0.012;

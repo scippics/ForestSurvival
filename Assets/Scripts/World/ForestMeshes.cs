@@ -14,7 +14,7 @@ public static class ForestMeshes
     const int FernSegments = 4;
     const int RockSides = 9;
     const int RockRings = 5;
-    const int TyreSides = 26;
+    const int TyreSides = 40;
     const int Seed = 90210;
 
     public static Mesh BuildTrunk(float baseRadius)
@@ -41,31 +41,101 @@ public static class ForestMeshes
     }
 
     // Ель из наложенных ярусов лап. Каждый ярус — зубчатая юбка с провисшими кончиками: сверху
-    // её закрывает ярус выше, поэтому верх тёмный, а кончики светлые.
-    public static Mesh BuildCrown()
+    // её закрывает ярус выше, поэтому верх тёмный, а кончики светлые. Дальние деревья берут версию проще.
+    public static Mesh BuildCrown(bool lowDetail)
     {
         var builder = new MeshBuilder();
         var random = new System.Random(Seed + 1);
+        AddBranchTiers(builder, random, 0.17f, 0.82f, 0.86f, 0.1f, lowDetail ? 5 : CrownTiers, lowDetail ? 10 : CrownSides);
+        return builder.ToMesh(lowDetail ? "CrownLow" : "Crown");
+    }
 
-        for (int tier = 0; tier < CrownTiers; tier++)
+    // Сосна: крона только наверху, ствол ниже голый.
+    public static Mesh BuildPineCrown(bool lowDetail)
+    {
+        var builder = new MeshBuilder();
+        var random = new System.Random(Seed + 11);
+        AddBranchTiers(builder, random, 0.62f, 0.9f, 1.05f, 0.34f, lowDetail ? 3 : 6, lowDetail ? 9 : 15);
+        return builder.ToMesh(lowDetail ? "PineLow" : "Pine");
+    }
+
+    // Берёза: облака листвы вокруг верхней части ствола.
+    public static Mesh BuildBirchCrown(bool lowDetail)
+    {
+        var builder = new MeshBuilder();
+        var random = new System.Random(Seed + 12);
+        int lumps = lowDetail ? 5 : 16;
+        int rings = lowDetail ? 3 : 5;
+        int sides = lowDetail ? 5 : 8;
+        for (int i = 0; i < lumps; i++)
         {
-            float t = tier / (CrownTiers - 1f);
-            float bottom = Mathf.Lerp(0.17f, 0.82f, t);
-            float top = bottom + Mathf.Lerp(0.3f, 0.18f, t);
-            float radius = Mathf.Lerp(0.86f, 0.1f, Mathf.Pow(t, 0.92f));
+            float t = (i + 0.5f) / lumps;
+            float height = Mathf.Lerp(0.42f, 0.95f, t);
+            float angle = (float)random.NextDouble() * Mathf.PI * 2f;
+            float reach = Mathf.Lerp(0.95f, 0.1f, t * t) * ((float)random.NextDouble() * 0.5f + 0.5f);
+            float size = Mathf.Lerp(0.75f, 0.38f, t) * (lowDetail ? 1.6f : 1f);
+            var center = new Vector3(Mathf.Cos(angle) * reach, height, Mathf.Sin(angle) * reach);
+            AddBlob(builder, random, center, new Vector3(size, size * 0.14f, size), rings, sides);
+        }
+        return builder.ToMesh(lowDetail ? "BirchLow" : "Birch");
+    }
+
+    public static Mesh BuildBush()
+    {
+        var builder = new MeshBuilder();
+        var random = new System.Random(Seed + 13);
+        for (int i = 0; i < 11; i++)
+        {
+            float angle = i * 2.4f + (float)random.NextDouble();
+            float reach = i == 0 ? 0f : 0.14f + i * 0.03f;
+            float size = i == 0 ? 0.42f : 0.24f;
+            var center = new Vector3(Mathf.Cos(angle) * reach, size * 0.9f, Mathf.Sin(angle) * reach);
+            AddBlob(builder, random, center, new Vector3(size, size, size), 4, 7);
+        }
+        return builder.ToMesh("Bush");
+    }
+
+    // Пень с плоским спилом: нижнее кольцо шире верхнего, сверху крышка.
+    public static Mesh BuildStump(float baseRadius)
+    {
+        var builder = new MeshBuilder();
+        float[] heights = { 0f, 0.3f, 0.85f, 1f, 1f };
+        float[] radii = { 1.5f, 1.08f, 1f, 1f, 0.01f };
+        for (int ring = 0; ring < heights.Length; ring++)
+        {
+            for (int side = 0; side < TrunkSides; side++)
+            {
+                float angle = side * Mathf.PI * 2f / TrunkSides;
+                var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                Vector3 normal = ring >= heights.Length - 2 ? Vector3.up : radial;
+                builder.Add(radial * (baseRadius * radii[ring]) + Vector3.up * heights[ring], normal, ring == 0 ? 0.55f : 1f, 0f);
+            }
+        }
+        builder.ConnectRings(0, heights.Length, TrunkSides);
+        return builder.ToMesh("Stump");
+    }
+
+    static void AddBranchTiers(MeshBuilder builder, System.Random random, float firstBottom, float lastBottom, float firstRadius, float lastRadius, int tiers, int sides)
+    {
+        for (int tier = 0; tier < tiers; tier++)
+        {
+            float t = tier / (tiers - 1f);
+            float bottom = Mathf.Lerp(firstBottom, lastBottom, t);
+            float top = bottom + Mathf.Lerp(0.3f, 0.18f, t) * (lastBottom - firstBottom + 0.35f);
+            float radius = Mathf.Lerp(firstRadius, lastRadius, Mathf.Pow(t, 0.92f));
             float twist = (float)random.NextDouble() * Mathf.PI * 2f;
             int start = builder.VertexCount;
 
-            for (int side = 0; side < CrownSides; side++)
+            for (int side = 0; side < sides; side++)
             {
-                float angle = twist + side * Mathf.PI * 2f / CrownSides;
+                float angle = twist + side * Mathf.PI * 2f / sides;
                 var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
                 builder.Add(radial * (radius * 0.28f) + Vector3.up * top, (radial * 0.5f + Vector3.up).normalized, 0.35f, 0f);
             }
 
-            for (int side = 0; side < CrownSides; side++)
+            for (int side = 0; side < sides; side++)
             {
-                float angle = twist + side * Mathf.PI * 2f / CrownSides;
+                float angle = twist + side * Mathf.PI * 2f / sides;
                 var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
                 bool isBranch = side % 2 == 1;
                 float jitter = 1f + ((float)random.NextDouble() - 0.5f) * 0.3f;
@@ -74,16 +144,36 @@ public static class ForestMeshes
                 builder.Add(radial * reach + Vector3.up * (bottom - droop), (radial + Vector3.up * 0.55f).normalized, 1f, isBranch ? 1f : 0.35f);
             }
 
-            for (int side = 0; side < CrownSides; side++)
+            for (int side = 0; side < sides; side++)
             {
-                float angle = twist + side * Mathf.PI * 2f / CrownSides;
+                float angle = twist + side * Mathf.PI * 2f / sides;
                 var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
                 builder.Add(radial * (radius * 0.2f) + Vector3.up * (bottom + (top - bottom) * 0.25f), Vector3.down, 0.12f, 0f);
             }
 
-            builder.ConnectRings(start, 3, CrownSides);
+            builder.ConnectRings(start, 3, sides);
         }
-        return builder.ToMesh("Crown");
+    }
+
+    // Неровный комок листвы: снизу в тени, сверху с просветом.
+    static void AddBlob(MeshBuilder builder, System.Random random, Vector3 center, Vector3 size, int rings, int sides)
+    {
+        int start = builder.VertexCount;
+        for (int ring = 0; ring < rings; ring++)
+        {
+            float t = (ring + 0.5f) / rings;
+            float polar = Mathf.Lerp(Mathf.PI * 0.95f, Mathf.PI * 0.05f, t);
+            for (int side = 0; side < sides; side++)
+            {
+                float angle = side * Mathf.PI * 2f / sides + ring * 0.6f;
+                // Чередование длины даёт зубчатый силуэт листвы вместо гладкого валуна.
+                float bump = (side % 2 == ring % 2 ? 1.3f : 0.72f) + ((float)random.NextDouble() - 0.5f) * 0.3f;
+                var direction = new Vector3(Mathf.Sin(polar) * Mathf.Cos(angle), Mathf.Cos(polar), Mathf.Sin(polar) * Mathf.Sin(angle));
+                Vector3 offset = Vector3.Scale(direction, size) * bump;
+                builder.Add(center + offset, (direction + Vector3.up * 0.3f).normalized, Mathf.Lerp(0.3f, 1f, t), bump > 1.1f ? 1f : t * 0.6f);
+            }
+        }
+        builder.ConnectRings(start, rings, sides);
     }
 
     // Голые сучья сухого дерева. Вид снизу важнее точности, поэтому это тонкие четырёхгранные колья.
@@ -200,12 +290,104 @@ public static class ForestMeshes
             {
                 float angle = side * Mathf.PI * 2f / TyreSides;
                 var radial = new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle));
-                bool isKnob = side % 2 == 0 && ring > 0 && ring < offsets.Length - 1;
-                builder.Add(radial * radii[ring] * (isKnob ? 1f : 0.93f) + Vector3.right * offsets[ring], radial, 1f, 0f);
+                bool isKnob = side % 4 < 2 && ring > 0 && ring < offsets.Length - 1;
+                builder.Add(radial * radii[ring] * (isKnob ? 1f : 0.94f) + Vector3.right * offsets[ring], radial, 1f, 0f);
             }
         }
         builder.ConnectRings(0, offsets.Length, TyreSides);
         return builder.ToMesh("Tyre", true);
+    }
+
+    // Кольцо в плоскости XY: обод руля.
+    public static Mesh BuildTorus(float majorRadius, float minorRadius)
+    {
+        const int majorSides = 32;
+        const int minorSides = 8;
+        var builder = new MeshBuilder();
+        for (int ring = 0; ring <= majorSides; ring++)
+        {
+            float around = ring * Mathf.PI * 2f / majorSides;
+            var outward = new Vector3(Mathf.Cos(around), Mathf.Sin(around), 0f);
+            for (int side = 0; side < minorSides; side++)
+            {
+                float tube = side * Mathf.PI * 2f / minorSides;
+                Vector3 normal = outward * Mathf.Cos(tube) + Vector3.forward * Mathf.Sin(tube);
+                builder.Add(outward * majorRadius + normal * minorRadius, normal, 1f, 0f);
+            }
+        }
+        builder.ConnectRings(0, majorSides + 1, minorSides);
+        return builder.ToMesh("Torus");
+    }
+
+    // Дуга в плоскости XY от угла до угла: арки над колёсами.
+    public static Mesh BuildArc(float majorRadius, float minorRadius, float startDegrees, float endDegrees)
+    {
+        const int segments = 20;
+        const int minorSides = 8;
+        var builder = new MeshBuilder();
+        for (int ring = 0; ring <= segments; ring++)
+        {
+            float around = Mathf.Lerp(startDegrees, endDegrees, ring / (float)segments) * Mathf.Deg2Rad;
+            var outward = new Vector3(Mathf.Cos(around), Mathf.Sin(around), 0f);
+            for (int side = 0; side < minorSides; side++)
+            {
+                float tube = side * Mathf.PI * 2f / minorSides;
+                Vector3 normal = outward * Mathf.Cos(tube) + Vector3.forward * Mathf.Sin(tube);
+                builder.Add(outward * majorRadius + normal * minorRadius, normal, 1f, 0f);
+            }
+        }
+        builder.ConnectRings(0, segments + 1, minorSides);
+        return builder.ToMesh("Arc");
+    }
+
+    // Тело вращения вокруг Y: профиль снизу вверх, точки (высота, радиус). Для рук, ног и корпуса.
+    public static Mesh BuildLathe(string name, Vector2[] profile, int sides, float xScale = 1f, float zScale = 1f)
+    {
+        int rows = profile.Length;
+        int columns = sides + 1;
+        var vertices = new Vector3[rows * columns];
+        var normals = new Vector3[rows * columns];
+        var uv = new Vector2[rows * columns];
+        var triangles = new int[(rows - 1) * sides * 6];
+
+        for (int row = 0; row < rows; row++)
+        {
+            Vector2 before = profile[Mathf.Max(row - 1, 0)];
+            Vector2 after = profile[Mathf.Min(row + 1, rows - 1)];
+            float dy = after.x - before.x;
+            float dr = after.y - before.y;
+            var flat = new Vector2(dy, -dr).normalized;
+
+            for (int column = 0; column < columns; column++)
+            {
+                float angle = column * Mathf.PI * 2f / sides;
+                float cos = Mathf.Cos(angle), sin = Mathf.Sin(angle);
+                int index = row * columns + column;
+                vertices[index] = new Vector3(cos * profile[row].y * xScale, profile[row].x, sin * profile[row].y * zScale);
+                normals[index] = new Vector3(cos * flat.x / xScale, flat.y, sin * flat.x / zScale).normalized;
+                uv[index] = new Vector2(column / (float)sides, row / (float)(rows - 1));
+            }
+        }
+
+        int t = 0;
+        for (int row = 0; row < rows - 1; row++)
+        {
+            for (int column = 0; column < sides; column++)
+            {
+                int a = row * columns + column;
+                int b = a + columns;
+                triangles[t++] = a;
+                triangles[t++] = b;
+                triangles[t++] = a + 1;
+                triangles[t++] = a + 1;
+                triangles[t++] = b;
+                triangles[t++] = b + 1;
+            }
+        }
+
+        var mesh = new Mesh { name = name, vertices = vertices, normals = normals, uv = uv, triangles = triangles };
+        mesh.RecalculateBounds();
+        return mesh;
     }
 
     class MeshBuilder

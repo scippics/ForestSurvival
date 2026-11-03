@@ -8,7 +8,7 @@ using UnityEngine;
 public static class SaveSystem
 {
     const string FileName = "save.json";
-    const int CurrentVersion = 1;
+    const int CurrentVersion = 2;
 
     [Serializable]
     class ItemState
@@ -16,6 +16,7 @@ public static class SaveSystem
         public string name;
         public Vector3 position;
         public Quaternion rotation;
+        public float liters;
     }
 
     [Serializable]
@@ -33,6 +34,9 @@ public static class SaveSystem
         public Quaternion vehicleRotation;
         public bool lightsOn;
         public bool handbrakeOn;
+        public float fuelLiters;
+        public int storyStage;
+        public bool campNoteRead;
         public List<Vector2Int> visitedCamps = new List<Vector2Int>();
         public List<string> recipes = new List<string>();
         public List<ItemState> items = new List<ItemState>();
@@ -50,6 +54,7 @@ public static class SaveSystem
         var view = player.GetComponentInChildren<PlayerCamera>();
         var vehicle = UnityEngine.Object.FindAnyObjectByType<VehicleController>();
         var forest = UnityEngine.Object.FindAnyObjectByType<OptimizedForestGenerator>();
+        var story = UnityEngine.Object.FindAnyObjectByType<StoryDirector>();
 
         var data = new SaveData
         {
@@ -65,6 +70,9 @@ public static class SaveSystem
             vehicleRotation = vehicle.transform.rotation,
             lightsOn = vehicle.LightsOn,
             handbrakeOn = vehicle.HandbrakeOn,
+            fuelLiters = vehicle.FuelLiters,
+            storyStage = (int)story.Stage,
+            campNoteRead = story.CampNoteRead,
             visitedCamps = forest.VisitedCamps,
             recipes = new List<string>(player.GetComponent<BlueprintNotebook>().unlockedRecipes)
         };
@@ -72,7 +80,7 @@ public static class SaveSystem
         foreach (Rigidbody body in UnityEngine.Object.FindObjectsByType<Rigidbody>(FindObjectsSortMode.None))
         {
             if (body.CompareTag(InteractionRay.PickupableTag))
-                data.items.Add(new ItemState { name = body.name, position = body.position, rotation = body.rotation });
+                data.items.Add(new ItemState { name = body.name, position = body.position, rotation = body.rotation, liters = body.TryGetComponent(out FuelCan can) ? can.Liters : 0f });
         }
 
         try
@@ -106,6 +114,8 @@ public static class SaveSystem
         PlaceBody(vehicle.GetComponent<Rigidbody>(), data.vehiclePosition, data.vehicleRotation);
         vehicle.SetLights(data.lightsOn);
         vehicle.HandbrakeOn = data.handbrakeOn;
+        vehicle.SetFuel(data.fuelLiters);
+        UnityEngine.Object.FindAnyObjectByType<StoryDirector>().Resume((StoryStage)data.storyStage, data.campNoteRead);
 
         var notebook = player.GetComponent<BlueprintNotebook>();
         notebook.unlockedRecipes = new List<string>(data.recipes);
@@ -123,6 +133,8 @@ public static class SaveSystem
             if (saved.TryGetValue(body.name, out ItemState item))
             {
                 PlaceBody(body, item.position, item.rotation);
+                if (body.TryGetComponent(out FuelCan can))
+                    can.SetLiters(item.liters);
                 saved.Remove(body.name);
             }
             else
@@ -137,8 +149,13 @@ public static class SaveSystem
         forest.VisitedCamps = data.visitedCamps ?? new List<Vector2Int>();
         foreach (ItemState item in saved.Values)
         {
-            if (item.name.StartsWith(ProceduralModels.LootPrefix))
-                forest.Track(ProceduralModels.CreateLoot(item.name, item.position, item.rotation).GetComponent<Rigidbody>());
+            if (!item.name.StartsWith(ProceduralModels.LootPrefix))
+                continue;
+
+            GameObject loot = ProceduralModels.CreateLoot(item.name, item.position, item.rotation);
+            forest.Track(loot.GetComponent<Rigidbody>());
+            if (loot.TryGetComponent(out FuelCan can))
+                can.SetLiters(item.liters);
         }
 
         view.Flashlight.enabled = data.flashlightOn;
