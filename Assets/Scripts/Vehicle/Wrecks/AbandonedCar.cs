@@ -20,6 +20,7 @@ public class AbandonedCar : MonoBehaviour
     public WreckSpec Spec { get; private set; }
     public float Liters => state.Liters;
     public Vector3 FillerPoint => filler.position;
+    public Transform Filler => filler;
     public readonly List<SalvagePart> Parts = new List<SalvagePart>();
 
     State state;

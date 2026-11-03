@@ -20,7 +20,7 @@ public class PlayerMovement : NetworkBehaviour
 
     // Предмет в руках замедляет шаг. Камера берёт отсюда же вес и настоящую скорость,
     // поэтому голова качается и при упоре в стену не качается, даже если клавиша зажата.
-    public bool IsBurdened => hands != null && hands.Held != null;
+    public bool IsBurdened => hands != null && hands.IsDragging;
     public float GroundSpeed
     {
         get

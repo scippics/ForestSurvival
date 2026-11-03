@@ -1,21 +1,22 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Предмет в руках остаётся обычным динамическим телом: его тянет к HoldPosition сила
-// с ограничением. Поэтому тяжёлое отстаёт и провисает, а стены его останавливают.
+// Предмет лежит прямо в кисти: он не весит, не болтается и не выпадает, пока его не отпустят.
+// Только длинные завалы остаются физическими: их не несут, а тащат за то место, где взялись.
 public class PlayerHands : MonoBehaviour
 {
-    const float MaxLiftForce = 350f;
     const float PositionGain = 10f;
     const float MaxCarrySpeed = 12f;
     const float VelocityResponse = 15f;
-    const float RotationGain = 8f;
-    const float MaxAngularSpeed = 10f;
-    const float BreakDistance = 2f;
     const float DragBreakDistance = 3.6f;
     const float MaxDragForce = 900f;
-    const float ThrowImpulse = 12f;
+    const float ThrowSpeed = 7f;
+    const float DragThrowImpulse = 12f;
     const float PourAngle = 72f;
+    const float GripResponse = 16f;
+    const float DropClearance = 0.3f;
+    const float DropProbeRadius = 0.12f;
+    static readonly Vector3 HandOffset = new Vector3(0.36f, -0.42f, 0.72f);
 
     public FuelSiphon HeldSiphon { get; private set; }
     public Rigidbody Held { get; private set; }
@@ -28,8 +29,8 @@ public class PlayerHands : MonoBehaviour
     Collider playerCollider;
     Transform view;
     Transform holdPosition;
+    Transform handPoint;
 
-    Quaternion heldRotationOffset;
     Vector3 dragLocalPoint;
     bool isDragged;
     CollisionDetectionMode savedCollisionMode;
@@ -46,6 +47,9 @@ public class PlayerHands : MonoBehaviour
         playerCollider = GetComponent<Collider>();
         view = GetComponentInChildren<PlayerCamera>().transform;
         holdPosition = view.Find("HoldPosition");
+        handPoint = new GameObject("HandPoint").transform;
+        handPoint.SetParent(view, false);
+        handPoint.localPosition = HandOffset;
     }
 
     void FixedUpdate()
@@ -54,16 +58,33 @@ public class PlayerHands : MonoBehaviour
         HandleCommands();
         UpdateSiphon();
 
-        if (Held != null)
+        if (Held != null && isDragged)
         {
-            Vector3 grip = isDragged ? Held.transform.TransformPoint(dragLocalPoint) : Held.worldCenterOfMass;
-            if (Vector3.Distance(grip, holdPosition.position) > (isDragged ? DragBreakDistance : BreakDistance))
+            Vector3 grip = Held.transform.TransformPoint(dragLocalPoint);
+            if (Vector3.Distance(grip, holdPosition.position) > DragBreakDistance)
                 Release();
-            else if (isDragged)
-                DriveDragged(grip);
             else
-                DriveHeld();
+                DriveDragged(grip);
         }
+    }
+
+    // Предмет дочерний к кисти, поэтому идёт вместе с камерой кадр в кадр. Здесь только плавный подъём и наклон при заливке.
+    void LateUpdate()
+    {
+        if (Held == null || isDragged)
+            return;
+
+        float blend = 1f - Mathf.Exp(-GripResponse * Time.deltaTime);
+        Transform item = Held.transform;
+        item.localPosition = Vector3.Lerp(item.localPosition, Vector3.zero, blend);
+
+        Quaternion wanted = handPoint.rotation;
+        if (PourTilt)
+        {
+            Vector3 flat = Vector3.ProjectOnPlane(view.forward, Vector3.up);
+            wanted = Quaternion.LookRotation(flat.sqrMagnitude > 0.01f ? flat : Vector3.forward, Vector3.up) * Quaternion.Euler(0f, 0f, -PourAngle);
+        }
+        item.rotation = Quaternion.Slerp(item.rotation, wanted, blend);
     }
 
     void HandleCommands()
@@ -71,8 +92,12 @@ public class PlayerHands : MonoBehaviour
         if (input.ConsumeThrow() && Held != null)
         {
             Rigidbody thrown = Held;
+            bool dragged = isDragged;
             Release();
-            thrown.AddForce(view.forward * ThrowImpulse, ForceMode.Impulse);
+            if (dragged)
+                thrown.AddForce(view.forward * DragThrowImpulse, ForceMode.Impulse);
+            else
+                thrown.AddForce(view.forward * ThrowSpeed, ForceMode.VelocityChange);
         }
 
         if (!input.ConsumeGrab())
@@ -174,8 +199,6 @@ public class PlayerHands : MonoBehaviour
         ForestAudio.Play(ForestSound.Click, 0.25f);
         if (target.TryGetComponent(out FuelCan can) && can.Liters > 0f)
             StoryDirector.Instance.OnFuelInHands();
-        heldRotationOffset = Quaternion.Inverse(holdPosition.rotation) * target.rotation;
-
         savedCollisionMode = target.collisionDetectionMode;
         savedInterpolation = target.interpolation;
         target.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
@@ -194,6 +217,46 @@ public class PlayerHands : MonoBehaviour
             pendingCollisionRestore.Remove(part);
             Physics.IgnoreCollision(playerCollider, part, true);
         }
+
+        if (!isDragged)
+            AttachToHand(target);
+    }
+
+    void AttachToHand(Rigidbody target)
+    {
+        // Лес сам переключает физику у далёких тел: на время в руке он этот предмет не трогает.
+        OptimizedForestGenerator.NetworkFollowed.Add(target);
+        target.linearVelocity = Vector3.zero;
+        target.angularVelocity = Vector3.zero;
+        target.isKinematic = true;
+        target.interpolation = RigidbodyInterpolation.None;
+        target.collisionDetectionMode = CollisionDetectionMode.Discrete;
+        foreach (Collider part in heldColliders)
+            part.enabled = false;
+        target.transform.SetParent(handPoint, true);
+    }
+
+    // Предмет остаётся перед игроком: сквозь стену он не вылетит, даже если рука оказалась за ней.
+    void DetachFromHand(Rigidbody target)
+    {
+        Vector3 eye = view.position;
+        Vector3 toItem = target.position - eye;
+        target.transform.SetParent(null, true);
+        if (Physics.SphereCast(eye, DropProbeRadius, toItem.normalized, out RaycastHit hit, toItem.magnitude + DropClearance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            target.transform.position = eye + toItem.normalized * Mathf.Max(0f, hit.distance - DropClearance);
+
+        target.position = target.transform.position;
+        target.rotation = target.transform.rotation;
+        foreach (Collider part in heldColliders)
+        {
+            part.enabled = true;
+
+            // Выключенный коллайдер забывает, что игрока надо пропускать.
+            Physics.IgnoreCollision(playerCollider, part, true);
+        }
+        target.isKinematic = false;
+        target.linearVelocity = playerBody.linearVelocity;
+        OptimizedForestGenerator.NetworkFollowed.Remove(target);
     }
 
     public void ReleaseHeld()
@@ -217,6 +280,9 @@ public class PlayerHands : MonoBehaviour
         if (HeldSiphon != null)
             HeldSiphon.CancelPump();
 
+        if (!isDragged)
+            DetachFromHand(Held);
+
         Held.collisionDetectionMode = savedCollisionMode;
         Held.interpolation = savedInterpolation;
 
@@ -230,6 +296,7 @@ public class PlayerHands : MonoBehaviour
         Held = null;
         HeldSiphon = null;
         PourTilt = false;
+        isDragged = false;
     }
 
     // Длинное дерево не несут, а тащат за то место, где взялись: один конец поднят, другой волочится по земле.
@@ -241,28 +308,6 @@ public class PlayerHands : MonoBehaviour
         Held.AddForceAtPosition(Vector3.ClampMagnitude(force, MaxDragForce), grip, ForceMode.Force);
     }
 
-    void DriveHeld()
-    {
-        Vector3 toTarget = holdPosition.position - Held.worldCenterOfMass;
-        Vector3 desired = playerBody.linearVelocity + Vector3.ClampMagnitude(toTarget * PositionGain, MaxCarrySpeed);
-        Vector3 force = Held.mass * ((desired - Held.linearVelocity) * VelocityResponse - Physics.gravity);
-        Held.AddForce(Vector3.ClampMagnitude(force, MaxLiftForce), ForceMode.Force);
-
-        // Когда льём, канистра наклоняется горловиной вперёд и вниз, как бы её ни подняли.
-        Quaternion wanted = holdPosition.rotation * heldRotationOffset;
-        if (PourTilt)
-        {
-            Vector3 flat = Vector3.ProjectOnPlane(view.forward, Vector3.up);
-            wanted = Quaternion.LookRotation(flat.sqrMagnitude > 0.01f ? flat : Vector3.forward, Vector3.up) * Quaternion.Euler(0f, 0f, -PourAngle);
-        }
-
-        Quaternion delta = wanted * Quaternion.Inverse(Held.rotation);
-        delta.ToAngleAxis(out float angle, out Vector3 axis);
-        if (angle > 180f)
-            angle -= 360f;
-        Vector3 spin = float.IsInfinity(axis.x) ? Vector3.zero : axis * (angle * Mathf.Deg2Rad * RotationGain);
-        Held.angularVelocity = Vector3.ClampMagnitude(spin, MaxAngularSpeed);
-    }
 
     // Столкновение с игроком возвращается только когда предмет уже вышел из капсулы,
     // иначе физика вытолкнет его рывком.

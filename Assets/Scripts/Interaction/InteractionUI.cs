@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-// Вешается на камеру: точка прицела, а под взглядом на предмет вместо неё значок клавиши и кайма на предмете.
-// Никаких текстов: что с предметом можно сделать, игрок узнаёт из самой клавиши.
+// Вешается на камеру: точка прицела, а под взглядом на предмет вместо неё значок клавиши, одно слово о действии
+// и кайма на предмете. С предметом в руках кайма заранее показывает, куда его нести.
 public class InteractionUI : MonoBehaviour
 {
     public const string KeyGrab = "ЛКМ";
@@ -12,6 +12,7 @@ public class InteractionUI : MonoBehaviour
     public const string KeyRecover = "R";
     const string DoorPartName = "Door";
     const char KeySeparator = ' ';
+    const string HoodPartName = "Hood";
 
     const int ReferenceHeight = 1080;
     const int DotTextureSize = 64;
@@ -25,11 +26,17 @@ public class InteractionUI : MonoBehaviour
     const float CapWideWidth = 60f;
     const float CapGap = 8f;
     const int CapFontSize = 19;
+    const int ActionFontSize = 17;
+    const float ActionOffset = 34f;
+    const float HintRadius = 8f;
+    const float HintPeriod = 0.4f;
     static readonly Color CapColor = new Color(0.04f, 0.04f, 0.04f, 0.62f);
     static readonly Color CapTextColor = new Color(0.94f, 0.92f, 0.84f);
 
     // Один значок или два через пробел: "E" или "E G".
     public string CurrentKey { get; private set; } = "";
+    public string CurrentAction { get; private set; } = "";
+    public Transform CurrentHint { get; private set; }
     public bool DotVisible => dot.enabled;
 
     PlayerHands hands;
@@ -39,8 +46,13 @@ public class InteractionUI : MonoBehaviour
     Image dot;
     readonly Image[] caps = new Image[2];
     readonly Text[] capTexts = new Text[2];
+    Text actionText;
+    float nextHint;
+    string hintPart;
     string shownKey = "";
+    string shownAction = "";
 
+    string action = "";
     Transform outlined;
     string outlinedPart;
 
@@ -97,6 +109,20 @@ public class InteractionUI : MonoBehaviour
 
             capObject.SetActive(false);
         }
+
+        var actionObject = new GameObject("KeyAction");
+        actionObject.transform.SetParent(canvasObject.transform, false);
+        actionText = actionObject.AddComponent<Text>();
+        actionText.font = font;
+        actionText.color = CapTextColor;
+        actionText.alignment = TextAnchor.MiddleCenter;
+        actionText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        actionText.verticalOverflow = VerticalWrapMode.Overflow;
+        actionText.raycastTarget = false;
+        var shadow = actionObject.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        shadow.effectDistance = new Vector2(1f, -1f);
+        Center(actionText.rectTransform);
     }
 
     static void Center(RectTransform rect)
@@ -146,6 +172,7 @@ public class InteractionUI : MonoBehaviour
         if (GameFlow.State != GameState.Playing)
         {
             CurrentKey = "";
+            CurrentAction = "";
             outline.Show(null);
             dot.enabled = false;
             DrawKeys();
@@ -155,13 +182,93 @@ public class InteractionUI : MonoBehaviour
         outlined = null;
         outlinedPart = null;
         bool aimed = InteractionRay.Cast(transform, out RaycastHit hit);
+        action = "";
         CurrentKey = ResolveKey(aimed, hit);
+        CurrentAction = action;
+
+        // Нет своей цели под прицелом: кайма показывает, куда нести то, что в руках.
+        if (outlined == null)
+        {
+            UpdateHint();
+            outlined = CurrentHint;
+            outlinedPart = hintPart;
+        }
         outline.Show(outlined, outlinedPart);
 
         // За рулём точка не нужна: центр экрана остаётся свободным для дороги.
         dot.enabled = !seat.IsSeated && CurrentKey.Length == 0;
         dot.rectTransform.sizeDelta = Vector2.one * (DotSize * Screen.height / ReferenceHeight);
         DrawKeys();
+    }
+
+    void UpdateHint()
+    {
+        if (Time.time < nextHint)
+            return;
+        nextHint = Time.time + HintPeriod;
+        CurrentHint = null;
+        hintPart = null;
+
+        Rigidbody held = hands.Held;
+        if (seat.IsSeated || held == null || hands.IsDragging)
+            return;
+
+        Vector3 here = transform.position;
+        if (hands.HeldSiphon != null)
+        {
+            if (hands.HeldSiphon.Source != null)
+                CurrentHint = NearestCan(here);
+            else
+                CurrentHint = NearestFiller(here);
+            return;
+        }
+
+        VehicleController car = FindAnyObjectByType<VehicleController>();
+        if (car == null || Vector3.Distance(here, car.transform.position) > HintRadius)
+            return;
+
+        if (held.TryGetComponent(out FuelCan can))
+        {
+            if (can.Liters > 0f && car.FuelLiters < car.TankSize)
+                CurrentHint = car.FillerCap;
+        }
+        else if (held.TryGetComponent(out CarPartItem _) || held.TryGetComponent(out CarBatteryItem _) || held.TryGetComponent(out RepairKit _))
+        {
+            CurrentHint = car.transform;
+            hintPart = HoodPartName;
+        }
+    }
+
+    Transform NearestFiller(Vector3 here)
+    {
+        Transform best = null;
+        float bestDistance = HintRadius;
+        foreach (AbandonedCar wreck in FindObjectsByType<AbandonedCar>(FindObjectsSortMode.None))
+        {
+            float distance = Vector3.Distance(here, wreck.FillerPoint);
+            if (wreck.Liters > 0.1f && distance < bestDistance)
+            {
+                best = wreck.Filler;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    Transform NearestCan(Vector3 here)
+    {
+        Transform best = null;
+        float bestDistance = HintRadius;
+        foreach (FuelCan can in FindObjectsByType<FuelCan>(FindObjectsSortMode.None))
+        {
+            float distance = Vector3.Distance(here, can.transform.position);
+            if (!can.IsFull && hands.HeldSiphon.CanReach(can) && distance < bestDistance)
+            {
+                best = can.transform;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
     string ResolveKey(bool aimed, RaycastHit hit)
@@ -174,7 +281,13 @@ public class InteractionUI : MonoBehaviour
             outlined = wrench.JobTarget;
 
         // С деталью в руках дело одно: ключ. С пустыми руками у машины можно и сесть, и снять деталь.
-        return hands.Held != null || basic.Length == 0 ? KeyWrench : basic + KeySeparator + KeyWrench;
+        if (hands.Held != null || basic.Length == 0)
+        {
+            action = wrench.JobName;
+            return KeyWrench;
+        }
+        action += " / " + wrench.JobName;
+        return basic + KeySeparator + KeyWrench;
     }
 
     string ResolveBasic(bool aimed, RaycastHit hit)
@@ -184,14 +297,19 @@ public class InteractionUI : MonoBehaviour
             if (seat.AimingAtKey)
             {
                 outlined = seat.Vehicle.IgnitionKey;
+                action = seat.Vehicle.EngineOn ? "Заглушить" : "Держать: завести";
                 return KeyInteract;
             }
             if (seat.AimingAtRadio)
             {
                 outlined = seat.Vehicle.RadioFace;
+                action = "Держать: эфир";
                 return KeyInteract;
             }
-            return seat.Vehicle.IsOverturned ? KeyRecover : "";
+            if (!seat.Vehicle.IsOverturned)
+                return "";
+            action = "Поставить на колёса";
+            return KeyRecover;
         }
 
         // Записка закрывается тем же кликом, которым открылась, а варианты ответа уже на экране.
@@ -206,13 +324,19 @@ public class InteractionUI : MonoBehaviour
             && InteractionRay.IsFreeVehicle(hit, out VehicleController car) && car.FuelLiters < car.TankSize)
         {
             outlined = car.FillerCap;
-            return Vector3.Distance(transform.position, car.FillerPoint) > PlayerSeat.PourReach ? "" : KeyInteract;
+            if (Vector3.Distance(transform.position, car.FillerPoint) > PlayerSeat.PourReach)
+                return "";
+            action = "Держать: залить";
+            return KeyInteract;
         }
 
         // Луч из зоны толкания не может попасть в её триггер: начало луча внутри него.
         // Поэтому значок опирается на сам факт нахождения в зоне, где F и работает.
         if (seat.PushZone != null)
+        {
+            action = "Толкать";
             return KeyPush;
+        }
 
         if (!aimed)
             return "";
@@ -220,35 +344,59 @@ public class InteractionUI : MonoBehaviour
         if (InteractionRay.IsFiller(hit, out _) && hands.HeldSiphon != null && hands.HeldSiphon.Source == null)
         {
             outlined = hit.collider.transform;
+            action = "Вставить шланг";
             return KeyGrab;
         }
         if (hands.Held == null && (InteractionRay.IsPickupable(hit) || InteractionRay.IsNpc(hit, out _) || InteractionRay.IsDoor(hit, out _)))
         {
             outlined = hit.rigidbody.transform;
+            action = GrabWord(hit);
             return KeyGrab;
         }
         if (InteractionRay.IsFuelTransfer(hands.HeldSiphon, hit))
         {
             outlined = hit.rigidbody.transform;
+            action = "Держать: подсос";
             return KeyGrab;
         }
         if (InteractionRay.IsCar(hit, out VehicleController boarding) && seat.ChooseSeat(boarding) != PlayerSeat.NoSeat)
         {
             outlined = boarding.transform;
             outlinedPart = DoorPartName;
+            action = "Сесть";
             return KeyInteract;
         }
         return "";
     }
 
+    static string GrabWord(RaycastHit hit)
+    {
+        if (InteractionRay.IsNpc(hit, out _))
+            return "Поговорить";
+        if (InteractionRay.IsDoor(hit, out HouseDoor door))
+            return door.IsOpen ? "Закрыть" : "Открыть";
+
+        Rigidbody body = hit.rigidbody;
+        if (body.TryGetComponent(out NoteItem _))
+            return "Читать";
+        if (body.TryGetComponent(out RoadBlock _))
+            return "Оттащить";
+        return "Взять";
+    }
+
     void DrawKeys()
     {
-        if (CurrentKey == shownKey && Time.frameCount % 30 != 0)
+        if (CurrentKey == shownKey && CurrentAction == shownAction && Time.frameCount % 30 != 0)
             return;
         shownKey = CurrentKey;
+        shownAction = CurrentAction;
 
         string[] keys = CurrentKey.Length == 0 ? System.Array.Empty<string>() : CurrentKey.Split(KeySeparator);
         float scale = Screen.height / (float)ReferenceHeight;
+
+        actionText.text = CurrentAction;
+        actionText.fontSize = Mathf.RoundToInt(ActionFontSize * scale);
+        actionText.rectTransform.anchoredPosition = new Vector2(0f, -ActionOffset * scale);
 
         float total = -CapGap;
         foreach (string key in keys)

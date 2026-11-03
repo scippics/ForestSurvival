@@ -9,6 +9,7 @@ public class FirstPersonArms : MonoBehaviour
     const float Response = 13f;
     const float HiddenDrop = 0.55f;
     const float WrenchSwingSpeed = 9f;
+    static readonly Vector3 GripBelowItem = new Vector3(0f, -0.1f, -0.03f);
 
     static readonly Vector3 LeftShoulder = new Vector3(-0.3f, -0.42f, -0.05f);
     static readonly Vector3 RightShoulder = new Vector3(0.3f, -0.42f, -0.05f);
@@ -96,8 +97,9 @@ public class FirstPersonArms : MonoBehaviour
         if (holding)
         {
             Vector3 item = transform.InverseTransformPoint(hands.Held.worldCenterOfMass);
-            leftTarget = Clamp(left.Shoulder, item + Vector3.left * HandSpread);
-            rightTarget = Clamp(right.Shoulder, item + Vector3.right * HandSpread);
+            if (hands.IsDragging)
+                leftTarget = Clamp(left.Shoulder, item + Vector3.left * HandSpread);
+            rightTarget = hands.IsDragging ? Clamp(right.Shoulder, item + Vector3.right * HandSpread) : Clamp(right.Shoulder, item + GripBelowItem);
         }
         else if (torchOn)
         {
@@ -115,7 +117,7 @@ public class FirstPersonArms : MonoBehaviour
             wrenchModel.localRotation = Quaternion.Euler(0f, swing * 35f, 0f);
         }
 
-        Pose(left, leftTarget, holding);
+        Pose(left, leftTarget, holding && hands.IsDragging);
         Pose(right, rightTarget, holding || torchOn || working);
     }
 

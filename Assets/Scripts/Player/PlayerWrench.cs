@@ -21,6 +21,7 @@ public class PlayerWrench : MonoBehaviour
     }
 
     public bool HasJob { get; private set; }
+    public string JobName { get; private set; } = "";
     public Transform JobTarget { get; private set; }
 
     // Точка, к которой тянется рука; null, пока никто не работает.
@@ -78,9 +79,28 @@ public class PlayerWrench : MonoBehaviour
 
     void Update()
     {
-        Job job = Evaluate(out SalvagePart part, out _, out _, out _, out _);
+        Job job = Evaluate(out SalvagePart part, out CarPartItem item, out _, out VehicleController car, out _);
         HasJob = job != Job.None;
         JobTarget = part != null ? part.transform : null;
+        switch (job)
+        {
+            case Job.Salvage:
+            case Job.Unmount:
+                JobName = "Снять";
+                break;
+            case Job.Mount:
+                JobName = car.GetComponent<CarUpgrades>().Mounted.ContainsKey(item.Info.Slot) ? "Заменить" : "Поставить";
+                break;
+            case Job.Battery:
+                JobName = "Сменить аккумулятор";
+                break;
+            case Job.Repair:
+                JobName = "Чинить";
+                break;
+            default:
+                JobName = "";
+                break;
+        }
     }
 
     void FixedUpdate()
