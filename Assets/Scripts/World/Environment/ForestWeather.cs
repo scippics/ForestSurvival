@@ -3,13 +3,13 @@ using UnityEngine;
 // Погода: дождь приходит и уходит сам. Значение Rain читают земля, стёкла, туман, дворники и звук.
 public class ForestWeather : MonoBehaviour
 {
-    const float FirstRainMinSeconds = 50f;
-    const float FirstRainMaxSeconds = 110f;
-    const float ClearMinSeconds = 180f;
-    const float ClearMaxSeconds = 420f;
-    const float RainMinSeconds = 100f;
-    const float RainMaxSeconds = 240f;
-    const float RainFadeSeconds = 12f;
+    const float FirstRainMinSeconds = 420f;
+    const float FirstRainMaxSeconds = 900f;
+    const float ClearMinSeconds = 480f;
+    const float ClearMaxSeconds = 1200f;
+    const float RainMinSeconds = 90f;
+    const float RainMaxSeconds = 200f;
+    const float RainFadeSeconds = 25f;
     const float ClearFog = 0.042f;
     const float RainFog = 0.058f;
     const float RainSunDim = 0.45f;

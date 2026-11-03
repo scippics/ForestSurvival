@@ -193,13 +193,13 @@ public class ForestAudio : MonoBehaviour
 
         // В паузе и в меню лес тоже слышен, поэтому только чёрные титры глушат всё.
         float cabin = seat.IsSeated ? CabinWind : 1f;
-        wind.volume = (0.26f + 0.08f * Mathf.Sin(Time.time * 0.13f)) * cabin * ambience;
+        wind.volume = (0.13f + 0.05f * Mathf.Sin(Time.time * 0.13f)) * (0.6f + 0.4f * ForestWeather.Wind) * cabin * ambience;
         crickets.volume = (DayNightCycle.IsDark ? 0.14f : 0f) * cabin * ambience;
         radio.volume = 0.3f * ambience;
 
         // По крыше кабины дождь глуше, но ближе: вся барабанная дробь над головой.
-        rain.volume = ForestWeather.Rain * (seat.IsSeated ? 0.55f : 0.4f) * ambience;
-        rainFilter.cutoffFrequency = seat.IsSeated ? 2400f : 9000f;
+        rain.volume = ForestWeather.Rain * (seat.IsSeated ? 0.24f : 0.2f) * ambience;
+        rainFilter.cutoffFrequency = seat.IsSeated ? 1500f : 3400f;
 
         UpdateEngine();
         UpdateSteps();
@@ -382,7 +382,7 @@ public class ForestAudio : MonoBehaviour
         {
             float t = i / (float)Rate;
             float gust = 0.55f + 0.3f * Mathf.Sin(Tau(t * 0.09f)) + 0.15f * Mathf.Sin(Tau(t * 0.23f) + 1.3f);
-            low += (Noise(random) - low) * Pole(180f + gust * 420f);
+            low += (Noise(random) - low) * Pole(70f + gust * 170f);
             band += (low - band) * Pole(70f);
             data[i] = (low - band * 0.7f) * gust;
         }
@@ -496,9 +496,9 @@ public class ForestAudio : MonoBehaviour
         for (int i = 0; i < data.Length; i++)
         {
             float noise = Noise(random);
-            low += (noise - low) * Pole(3800f);
-            high += (low - high) * Pole(700f);
-            float drop = random.NextDouble() < 0.0025 ? Noise(random) * 2.5f : 0f;
+            low += (noise - low) * Pole(2200f);
+            high += (low - high) * Pole(300f);
+            float drop = random.NextDouble() < 0.0012 ? Noise(random) * 1.2f : 0f;
             data[i] = (low - high) + drop;
         }
         return MakeLoop("Rain", data, 0.6f);
