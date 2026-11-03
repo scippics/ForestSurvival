@@ -12,7 +12,7 @@ public class ForestWeather : MonoBehaviour
     const float RainFadeSeconds = 12f;
     const float ClearFog = 0.042f;
     const float RainFog = 0.058f;
-    const float RainSunDim = 0.6f;
+    const float RainSunDim = 0.45f;
     const float DropsPerSecond = 3600f;
     const float SplashesPerSecond = 1100f;
     const float SplashRadius = 32f;

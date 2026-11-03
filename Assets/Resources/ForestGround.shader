@@ -10,7 +10,7 @@ Shader "Forest/Ground"
         _SoilColor ("Soil", Color) = (0.075, 0.055, 0.04, 1)
         _DirtColor ("Trampled Dirt", Color) = (0.17, 0.14, 0.11, 1)
         _RoadColor ("Road", Color) = (0.15, 0.125, 0.1, 1)
-        _MudColor ("Mud", Color) = (0.055, 0.04, 0.028, 1)
+        _MudColor ("Mud", Color) = (0.085, 0.064, 0.046, 1)
         _RoadHalfWidth ("Road Half Width", Float) = 5.5
     }
     SubShader
@@ -51,9 +51,15 @@ Shader "Forest/Ground"
             float grit = tex2D(_ForestNoise, xz * 1.9).b;
 
             // Лесная подстилка: пятна мха и хвои поверх тёмной почвы.
-            float litter = smoothstep(0.38, 0.62, macro * 0.55 + patches * 0.45);
-            float3 forest = lerp(_MossColor.rgb * (0.82 + 0.36 * fine), _LitterColor.rgb * (0.8 + 0.4 * grit), litter);
-            forest = lerp(forest, _SoilColor.rgb, smoothstep(0.6, 0.78, fine) * 0.55);
+            // Границы широкие: резкий порог давал на земле чёрные пятна, как на корове.
+            float fineSoft = tex2D(_ForestNoise, xz * 0.13).g;
+            float litter = smoothstep(0.3, 0.7, macro * 0.5 + patches * 0.3 + fineSoft * 0.2);
+            float3 forest = lerp(_MossColor.rgb * (0.82 + 0.36 * fine), _LitterColor.rgb * (0.82 + 0.36 * grit), litter);
+            forest = lerp(forest, _SoilColor.rgb, smoothstep(0.42, 0.95, fine * 0.55 + fineSoft * 0.45) * 0.5);
+
+            // Опавшая хвоя: короткие светлые штрихи, заметные только вблизи.
+            float needle = tex2D(_ForestNoise, float2(xz.x * 2.9 + xz.y * 0.7, xz.y * 0.35 - xz.x * 0.2)).a;
+            forest *= 1.0 + smoothstep(0.62, 0.8, needle) * 0.28 * litter;
 
             float bare = saturate(IN.color.g * 1.6 - (patches - 0.5) * 1.2 - 0.3);
             forest = lerp(forest, _DirtColor.rgb * (0.85 + 0.3 * grit), bare);
@@ -67,27 +73,32 @@ Shader "Forest/Ground"
             float rut = smoothstep(0.62, 0.14, abs(abs(offset) - 0.98));
             float crown = smoothstep(0.55, 0.1, abs(offset)) * smoothstep(0.35, 0.6, fine);
 
-            float wet = saturate(depth * 0.9 + rut * 0.45 + (patches - 0.5) * 0.7 + _ForestRain * 0.35);
+            float wet = saturate(depth * 0.9 + rut * 0.45 + (patches - 0.5) * 0.7 + _ForestRain * 0.3);
             float puddle = smoothstep(0.62 - _ForestRain * 0.16, 0.74 - _ForestRain * 0.16, depth * 0.55 + rut * 0.34 + (patches - 0.5) * 0.55) * road;
             float3 roadAlbedo = lerp(_RoadColor.rgb * (0.88 + 0.24 * grit), _MudColor.rgb, wet);
             roadAlbedo = lerp(roadAlbedo, _MossColor.rgb * 0.8, crown * (1.0 - wet) * 0.8);
 
             o.Albedo = lerp(forest, roadAlbedo, road);
             o.Albedo *= 1.0 - puddle * 0.45;
-            o.Smoothness = lerp(lerp(0.06, 0.12, bare), lerp(0.12, 0.42, wet), road);
-            o.Smoothness = lerp(o.Smoothness, 0.93, puddle);
+            o.Smoothness = lerp(lerp(0.06, 0.12, bare), lerp(0.1, 0.3, wet), road);
 
             // В дождь земля темнеет и блестит везде, а не только на дороге.
-            o.Albedo *= 1.0 - _ForestRain * 0.28;
-            o.Smoothness = saturate(o.Smoothness + _ForestRain * 0.22);
+            o.Albedo *= 1.0 - _ForestRain * 0.16;
+            o.Smoothness += _ForestRain * 0.12;
 
-            // Мелкий рельеф из разности шума; в луже поверхность гладкая.
+            // Мелкий рельеф из разности шума; в луже поверхность гладкая. Вдали он гаснет вместе с блеском:
+            // иначе каждый бугорок даёт отдельный блик, и дорога рябит.
+            float nearby = saturate(1.0 - length(IN.worldPos - _WorldSpaceCameraPos) / 26.0);
+            o.Smoothness *= lerp(0.55, 1.0, nearby);
+            o.Smoothness = lerp(saturate(o.Smoothness), 0.93, puddle);
+
             const float texel = 0.012;
             float2 uv = xz * 0.55;
             float height = tex2D(_ForestNoise, uv).b;
             float dx = tex2D(_ForestNoise, uv + float2(texel, 0)).b - height;
             float dz = tex2D(_ForestNoise, uv + float2(0, texel)).b - height;
-            o.Normal = normalize(float3(-dx * 0.9, dz * 0.9, 1.0) * float3(1.0 - puddle, 1.0 - puddle, 1.0));
+            float relief = 0.55 * nearby * (1.0 - puddle);
+            o.Normal = normalize(float3(-dx * relief, dz * relief, 1.0));
 
             // Фары светят почти вдоль земли: под таким углом любой рельеф даёт чёрные пятна вместо тени.
             #ifdef UNITY_PASS_FORWARDADD
