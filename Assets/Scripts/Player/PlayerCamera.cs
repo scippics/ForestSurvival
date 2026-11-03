@@ -131,7 +131,7 @@ public class PlayerCamera : MonoBehaviour
     void Update()
     {
         if (input.ConsumeFlashlight())
-            Flashlight.enabled = !Flashlight.enabled;
+            GetComponentInParent<TorchCharge>().Toggle();
 
         Vector2 delta = input.LookDelta * GameSettings.Sensitivity;
         if (IsSeated)

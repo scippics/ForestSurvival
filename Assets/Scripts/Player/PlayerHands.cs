@@ -147,6 +147,16 @@ public class PlayerHands : MonoBehaviour
             return;
         }
 
+        if (target.TryGetComponent(out CellPack _))
+        {
+            GetComponent<TorchCharge>().Refill();
+            ForestAudio.Play(ForestSound.Click, 0.6f);
+            if (WorldSync.Instance != null)
+                WorldSync.Instance.AnnounceItemRemoved(target.name);
+            Destroy(target.gameObject);
+            return;
+        }
+
         if (target.TryGetComponent(out NoteItem note))
         {
             StoryUI.Instance.ShowNote(note.text);

@@ -345,6 +345,7 @@ public static class Kordon
 
         ProceduralModels.CreateBlueprint("Item_Blueprint", house.TransformPoint(new Vector3(-2.65f, 1.02f, 1.9f))).AddComponent<BlueprintItem>().recipeID = "fuel_filter";
         ProceduralModels.CreateBattery("Item_Battery", house.TransformPoint(new Vector3(2.9f, 0.25f, -1.9f)), house.rotation);
+        ProceduralModels.CreateCells(ProceduralModels.LootPrefix + ProceduralModels.CellsKind + "_house", house.TransformPoint(surface + new Vector3(0.05f, 0.07f, 0.22f)), house.rotation);
 
         // Нары с одеялом у задней стены.
         Box(house, "Bunk", new Vector3(-1.9f, floor + 0.28f, 1.75f), new Vector3(2f, 0.1f, 0.85f), wood);

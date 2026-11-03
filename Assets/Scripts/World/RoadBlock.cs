@@ -24,6 +24,8 @@ public class RoadBlock : MonoBehaviour
     static readonly Color NeedleColor = new Color(0.07f, 0.13f, 0.07f);
 
     static bool warned;
+    static Mesh bough;
+    static Mesh Bough => bough != null ? bough : bough = ForestMeshes.BuildLooseBough();
 
     public bool IsLodged { get; private set; } = true;
 
@@ -72,11 +74,12 @@ public class RoadBlock : MonoBehaviour
             Vector3 end = turn * Vector3.up * reach;
             ProceduralModels.Part(root.transform, "FallenBranch", PrimitiveType.Cylinder, new Vector3(x, 0f, 0f) + end * 0.5f, new Vector3(radius * 0.5f, reach * 0.5f, radius * 0.5f), bark, turn);
 
-            // Хвоя плоскими лапами вдоль ветки.
-            for (int j = 0; j < 3; j++)
+            // Лапы хвои расходятся от ветки в разные стороны.
+            for (int j = 0; j < 4; j++)
             {
-                Vector3 at = new Vector3(x, 0f, 0f) + end * (0.45f + j * 0.25f);
-                ProceduralModels.Part(root.transform, "FallenNeedles", PrimitiveType.Cube, at, new Vector3(0.5f - j * 0.1f, 0.03f, 0.3f), needles, turn * Quaternion.Euler(0f, 30f * j, 10f));
+                Vector3 at = new Vector3(x, 0f, 0f) + end * (0.35f + j * 0.2f);
+                Quaternion lay = Quaternion.Euler((float)random.NextDouble() * 50f - 25f, j * 90f + (float)random.NextDouble() * 60f, (float)random.NextDouble() * 40f - 20f);
+                ProceduralModels.MeshPart(root.transform, "FallenNeedles", Bough, at, Vector3.one * (0.75f - j * 0.08f), needles, lay);
             }
         }
 

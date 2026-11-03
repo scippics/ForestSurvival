@@ -113,6 +113,8 @@ public class OptimizedForestGenerator : MonoBehaviour
     const int RoadBlockMinRow = 2;
     const double RoadBlockTreeChance = 0.6;
     const double WreckChance = 0.2;
+    const double WreckCellsChance = 0.3;
+    const double WreckCanChance = 0.15;
     const double WreckByRoadChance = 0.6;
     const float CrownLodDistance = 30f;
     const float LodRefreshDistance = 4f;
@@ -127,6 +129,7 @@ public class OptimizedForestGenerator : MonoBehaviour
 
     // Чанки, где завал уже лёг: сдвинутый не должен появиться снова.
     public List<Vector2Int> VisitedBlocks { get; set; } = new List<Vector2Int>();
+    public List<Vector2Int> VisitedWrecks { get; set; } = new List<Vector2Int>();
 
     // Стоянки, где лут уже выпал: дальше за него отвечает сохранение, а не генератор.
     public List<Vector2Int> VisitedCamps { get; set; } = new List<Vector2Int>();
@@ -465,6 +468,26 @@ public class OptimizedForestGenerator : MonoBehaviour
         wreck = WreckBuilder.Spawn(chunk.Coord.x + "." + chunk.Coord.y, site.Spec, ground, site.Yaw, site.Seed);
         wreck.transform.SetParent(transform, true);
         wreckObjects[chunk.Coord] = wreck;
+
+        // Из бардачка: батарейки и иногда канистра. Раз за игру, как и лут стоянок.
+        if (VisitedWrecks.Contains(chunk.Coord))
+            return;
+        VisitedWrecks.Add(chunk.Coord);
+        var random = new System.Random(site.Seed + 5);
+        if (random.NextDouble() < WreckCellsChance)
+            DropWreckLoot(ProceduralModels.CellsKind, chunk.Coord, 0, ground, site, random);
+        if (random.NextDouble() < WreckCanChance)
+            DropWreckLoot(ProceduralModels.JerrycanKind, chunk.Coord, 1, ground, site, random);
+    }
+
+    void DropWreckLoot(string kind, Vector2Int coord, int index, Vector3 ground, WreckSite site, System.Random random)
+    {
+        float angle = (float)random.NextDouble() * Mathf.PI * 2f;
+        float x = ground.x + Mathf.Cos(angle) * (site.Radius + 0.3f);
+        float z = ground.z + Mathf.Sin(angle) * (site.Radius + 0.3f);
+        string lootName = ProceduralModels.LootPrefix + kind + "_w" + coord.x + "_" + coord.y + "_" + index;
+        GameObject loot = ProceduralModels.CreateLoot(lootName, new Vector3(x, TerrainHeight(x, z) + CampLootDropHeight, z), Quaternion.Euler(0f, angle * 57f, 0f));
+        Track(loot.GetComponent<Rigidbody>());
     }
 
     void ReleaseWreck(Chunk chunk)
@@ -1059,7 +1082,8 @@ public class OptimizedForestGenerator : MonoBehaviour
             float distance = Mathf.Lerp(CampLootMinDistance, CampLootMaxDistance, (float)random.NextDouble());
             float x = center.x + Mathf.Cos(angle) * distance;
             float z = center.z + Mathf.Sin(angle) * distance;
-            string kind = random.NextDouble() < 0.5 ? ProceduralModels.JerrycanKind : ProceduralModels.BatteryKind;
+            double roll = random.NextDouble();
+            string kind = roll < 0.45 ? ProceduralModels.JerrycanKind : roll < 0.8 ? ProceduralModels.CellsKind : ProceduralModels.BatteryKind;
             string lootName = ProceduralModels.LootPrefix + kind + "_" + coord.x + "_" + coord.y + "_" + i;
 
             // Канистра лежит на боку или стоит: разбросано как попало, а не выставлено.

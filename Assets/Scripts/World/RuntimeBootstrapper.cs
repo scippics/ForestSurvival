@@ -50,6 +50,7 @@ public static class RuntimeBootstrapper
         new GameObject("Audio").AddComponent<ForestAudio>();
         new GameObject("Weather").AddComponent<ForestWeather>();
         new GameObject("Watcher").AddComponent<ForestWatcher>();
+        new GameObject("GroundTracks").AddComponent<GroundTracks>();
 
         if (Unity.Netcode.NetworkManager.Singleton.IsServer)
         {
@@ -116,6 +117,7 @@ public static class RuntimeBootstrapper
         zone.size = new Vector3(2f, 2.4f, 1.6f);
 
         vehicle.AddComponent<CarUpgrades>();
+        vehicle.AddComponent<WheelTracks>();
         vehicle.AddComponent<PushableVehicle>();
         vehicle.AddComponent<WheelMudSpray>();
         var impact = vehicle.AddComponent<ImpactSound>();
@@ -343,6 +345,7 @@ public static class RuntimeBootstrapper
         ProceduralModels.BuildMannequin(player.transform);
         player.AddComponent<PlayerMovement>();
         player.AddComponent<PlayerAvatar>();
+        player.AddComponent<Footprints>();
         return player;
     }
 
@@ -374,6 +377,7 @@ public static class RuntimeBootstrapper
         player.AddComponent<PlayerHands>();
         player.AddComponent<PlayerSeat>();
         player.AddComponent<PlayerWrench>();
+        player.AddComponent<TorchCharge>();
         cameraObject.AddComponent<InteractionUI>();
         cameraObject.AddComponent<FirstPersonArms>();
     }

@@ -53,6 +53,8 @@ public static class SaveSystem
         public List<WreckState> wrecks = new List<WreckState>();
         public List<int> mountedParts = new List<int>();
         public List<Vector2Int> visitedBlocks = new List<Vector2Int>();
+        public List<Vector2Int> visitedWrecks = new List<Vector2Int>();
+        public float torchUsed;
     }
 
     static string SavePath => Path.Combine(Application.persistentDataPath, FileName);
@@ -88,6 +90,8 @@ public static class SaveSystem
             campNoteRead = story.CampNoteRead,
             visitedCamps = forest.VisitedCamps,
             visitedBlocks = forest.VisitedBlocks,
+            visitedWrecks = forest.VisitedWrecks,
+            torchUsed = 1f - player.GetComponent<TorchCharge>().Charge,
             recipes = new List<string>(player.GetComponent<BlueprintNotebook>().unlockedRecipes)
         };
 
@@ -179,6 +183,8 @@ public static class SaveSystem
         var forest = UnityEngine.Object.FindAnyObjectByType<OptimizedForestGenerator>();
         forest.VisitedCamps = data.visitedCamps ?? new List<Vector2Int>();
         forest.VisitedBlocks = data.visitedBlocks ?? new List<Vector2Int>();
+        forest.VisitedWrecks = data.visitedWrecks ?? new List<Vector2Int>();
+        player.GetComponent<TorchCharge>().SetCharge(1f - data.torchUsed);
         foreach (ItemState item in saved.Values)
         {
             if (RoadBlock.TryParseKind(item.name, out int blockKind))

@@ -63,6 +63,15 @@ public static class ForestMeshes
         return builder.ToMesh(lowDetail ? "CrownLow" : "Crown");
     }
 
+    // Одна лапа отдельно: для упавшего дерева, у которого нет кроны вокруг ствола.
+    public static Mesh BuildLooseBough()
+    {
+        var builder = new MeshBuilder();
+        var random = new System.Random(Seed + 31);
+        AddBough(builder, random, Mathf.PI * 0.5f, 0f, 1f, 0.12f, 6);
+        return builder.ToMesh("LooseBough");
+    }
+
     // Подрост: те же лапы, только реже и проще: таких ёлок в чанке больше сотни.
     public static Mesh BuildSapling()
     {

@@ -10,6 +10,7 @@ public static class ProceduralModels
     public const string CampNoteName = "Note_Camp";
     public const string JerrycanKind = "Jerrycan";
     public const string BatteryKind = "Battery";
+    public const string CellsKind = "Cells";
     public const string MannequinName = "Mannequin";
     public const string MannequinHeadName = "Head";
 
@@ -18,6 +19,7 @@ public static class ProceduralModels
     const float CrateMass = 30f;
     const float HoseMass = 2f;
     const float BlueprintMass = 0.1f;
+    const float CellsMass = 0.15f;
 
     static readonly Color PlankColor = new Color(0.27f, 0.22f, 0.17f);
     static readonly Color OldPlankColor = new Color(0.25f, 0.2f, 0.15f);
@@ -147,6 +149,24 @@ public static class ProceduralModels
         return root;
     }
 
+    public static GameObject CreateCells(string name, Vector3 position, Quaternion rotation)
+    {
+        GameObject root = CreateItemRoot(name, position, rotation, CellsMass);
+        Transform t = root.transform;
+        foreach (float x in new[] { -0.018f, 0.018f })
+        {
+            Part(t, "Cell", PrimitiveType.Cylinder, new Vector3(x, 0f, 0f), new Vector3(0.034f, 0.045f, 0.034f), Lit(new Color(0.08f, 0.09f, 0.11f), 0f, 0f, 0.45f));
+            Part(t, "CellTip", PrimitiveType.Cylinder, new Vector3(x, 0.05f, 0f), new Vector3(0.014f, 0.004f, 0.014f), Lit(TerminalMinusColor, 0f, 0f, 0.6f));
+        }
+        Part(t, "CellWrap", PrimitiveType.Cube, Vector3.zero, new Vector3(0.076f, 0.05f, 0.038f), Lit(PaperColor * 0.75f));
+
+        // Коллайдер крупнее пачки: иначе такую мелочь не поймать взглядом.
+        root.AddComponent<BoxCollider>().size = new Vector3(0.14f, 0.13f, 0.1f);
+        Object.Destroy(root.GetComponent<ImpactSound>());
+        root.AddComponent<CellPack>();
+        return root;
+    }
+
     public static GameObject CreateCrate(string name, Vector3 position)
     {
         GameObject root = CreateItemRoot(name, position, Quaternion.identity, CrateMass);
@@ -250,6 +270,8 @@ public static class ProceduralModels
 
     public static GameObject CreateLoot(string name, Vector3 position, Quaternion rotation)
     {
+        if (name.StartsWith(LootPrefix + CellsKind))
+            return CreateCells(name, position, rotation);
         return name.StartsWith(LootPrefix + BatteryKind)
             ? CreateBattery(name, position, rotation)
             : CreateJerrycan(name, position, rotation);
