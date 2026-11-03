@@ -53,7 +53,7 @@ public class FuelSiphon : MonoBehaviour
         material.SetColor("_EmissionColor", Color.white * 0.75f);
 
         Material bezel = ProceduralModels.Lit(new Color(0.6f, 0.47f, 0.2f), 0f, 0f, 0.5f);
-        ProceduralModels.Part(gauge, "GaugeBody", PrimitiveType.Cylinder, Vector3.forward * 0.012f, new Vector3(GaugeSize * 1.14f, 0.01f, GaugeSize * 1.14f), bezel, Quaternion.Euler(90f, 0f, 0f));
+        ProceduralModels.Part(gauge, "GaugeBody", PrimitiveType.Cylinder, Vector3.forward * 0.012f, new Vector3(GaugeSize * 1.5f, 0.01f, GaugeSize * 1.5f), bezel, Quaternion.Euler(90f, 0f, 0f));
 
         Material green = ProceduralModels.CreateLit(Color.black);
         green.SetColor("_EmissionColor", GaugeGreen);
