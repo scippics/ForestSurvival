@@ -6,8 +6,8 @@ using System.Threading;
 using Debug = UnityEngine.Debug;
 
 // Захват звука компьютера для магнитолы: Spotify, Яндекс.Музыка, браузер. Unity так не умеет, поэтому напрямую WASAPI.
-// Сначала режим «всё, кроме этой игры» (Windows 10 2004 и новее): иначе в эфир ушли бы наш мотор и лес.
-// На старой Windows обычный захват всего вывода, и тогда игра в эфире слышна. На Mac захвата нет, там только приём.
+// Режим «всё, кроме этой игры»: иначе в эфир ушли бы наш мотор и лес. Игра рассчитана на Windows 11 и Mac,
+// поэтому запасного захвата для старых систем нет. На Mac захвата нет, там только приём.
 public sealed class RadioCapture : IDisposable
 {
     public const int OutputRate = 22050;
@@ -36,8 +36,6 @@ public sealed class RadioCapture : IDisposable
     bool hasHalfSample;
     int halfSample;
 
-    // Игру удалось исключить из захвата; false значит обычный захват всего вывода.
-    public bool ExcludesGame { get; private set; }
     public string Error { get; private set; }
 
     public RadioCapture()
@@ -80,9 +78,8 @@ public sealed class RadioCapture : IDisposable
         try
         {
             client = ActivateExcludingGame();
-            ExcludesGame = client != null;
             if (client == null)
-                client = ActivateWholeOutput();
+                throw new InvalidOperationException("система не дала захват без звука игры");
 
             var format = new WaveFormat
             {
@@ -207,17 +204,6 @@ public sealed class RadioCapture : IDisposable
         }
     }
 
-    static IAudioClient ActivateWholeOutput()
-    {
-        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-        enumerator.GetDefaultAudioEndpoint(0, 1, out IMMDevice device);
-        Guid clientId = typeof(IAudioClient).GUID;
-        device.Activate(ref clientId, 23, IntPtr.Zero, out object created);
-        Marshal.ReleaseComObject(device);
-        Marshal.ReleaseComObject(enumerator);
-        return (IAudioClient)created;
-    }
-
     [DllImport("Mmdevapi.dll", ExactSpelling = true, PreserveSig = false)]
     static extern void ActivateAudioInterfaceAsync(
         [MarshalAs(UnmanagedType.LPWStr)] string path,
@@ -246,24 +232,6 @@ public sealed class RadioCapture : IDisposable
         {
             Done.Set();
         }
-    }
-
-    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-    class MMDeviceEnumerator
-    {
-    }
-
-    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IMMDeviceEnumerator
-    {
-        void EnumAudioEndpoints(int flow, int mask, out IntPtr devices);
-        void GetDefaultAudioEndpoint(int flow, int role, out IMMDevice device);
-    }
-
-    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IMMDevice
-    {
-        void Activate(ref Guid iid, int context, IntPtr parameters, [MarshalAs(UnmanagedType.IUnknown)] out object created);
     }
 
     [ComImport, Guid("1CB9AD4C-DBFA-4C32-B178-C2F568A703B2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -311,7 +279,6 @@ public sealed class RadioCapture : IDisposable
     }
 #else
     public static bool IsSupported => false;
-    public bool ExcludesGame => false;
     public string Error => "Захват доступен только на Windows";
     public int Available => 0;
 

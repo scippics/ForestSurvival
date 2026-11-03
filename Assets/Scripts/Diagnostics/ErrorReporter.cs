@@ -184,6 +184,7 @@ public class ErrorReporter : MonoBehaviour
         return "==================================================\n"
                + $"Запуск: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n"
                + $"Игра: {Application.productName} {Application.version}, Unity {Application.unityVersion}\n"
+               + $"Устройство: {SystemInfo.deviceModel}\n"
                + $"Система: {SystemInfo.operatingSystem}\n"
                + $"Процессор: {SystemInfo.processorType}, {SystemInfo.processorCount} ядер, ОЗУ {SystemInfo.systemMemorySize} МБ\n"
                + $"Видеокарта: {SystemInfo.graphicsDeviceName}, {SystemInfo.graphicsMemorySize} МБ\n"

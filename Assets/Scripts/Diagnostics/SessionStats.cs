@@ -195,6 +195,7 @@ public class SessionStats : MonoBehaviour
         var text = new StringBuilder("==================================================\n");
         text.Append($"Сессия: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
         text.Append($"Игра: {Application.productName} {Application.version}, Unity {Application.unityVersion}\n");
+        text.Append($"Устройство: {SystemInfo.deviceModel}\n");
         text.Append($"Система: {SystemInfo.operatingSystem}\n");
         text.Append($"Процессор: {SystemInfo.processorType}, {SystemInfo.processorCount} ядер, ОЗУ {SystemInfo.systemMemorySize} МБ\n");
         text.Append($"Видеокарта: {SystemInfo.graphicsDeviceName}, {SystemInfo.graphicsMemorySize} МБ, {SystemInfo.graphicsDeviceType}\n");
