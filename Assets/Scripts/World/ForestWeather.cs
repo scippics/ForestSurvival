@@ -19,11 +19,11 @@ public class ForestWeather : MonoBehaviour
     const float EmitHeight = 8f;
 
     // Струя у самой камеры не должна становиться толстой белой полосой на весь экран.
-    const float MaxDropScreenSize = 0.012f;
+    const float MaxDropScreenSize = 0.007f;
     const float ThunderMinRain = 0.6f;
 
     static readonly int RainId = Shader.PropertyToID("_ForestRain");
-    static readonly Color DropColor = new Color(0.72f, 0.78f, 0.85f, 0.42f);
+    static readonly Color DropColor = new Color(0.72f, 0.78f, 0.85f, 0.35f);
     static readonly Color SplashColor = new Color(0.75f, 0.8f, 0.85f, 0.3f);
 
     public static float Rain { get; private set; }

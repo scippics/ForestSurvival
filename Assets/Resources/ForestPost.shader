@@ -42,6 +42,14 @@ Shader "Hidden/ForestPost"
         return float3((uv * 2.0 - 1.0) * slope * eye, eye);
     }
 
+    // Без упорядоченного шума: его почти вертикальный шаблон на тёмной земле читался как полосы на камере.
+    float WhiteNoise(float2 p)
+    {
+        p = frac(p * float2(0.1031, 0.1030));
+        p += dot(p, p.yx + 33.33);
+        return frac((p.x + p.y) * p.x);
+    }
+
     // Один пиксель с NaN размытие разносит на весь кадр, и экран становится чёрным.
     float3 Clean(float3 color)
     {
@@ -70,7 +78,7 @@ Shader "Hidden/ForestPost"
         float radius = _AoRadius * unity_CameraProjection._22 * 0.5 / eye;
 
         // Случайный поворот на пиксель; остаточный шум убирает размытие.
-        float angle = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715)))) * 6.2831853;
+        float angle = WhiteNoise(i.pos.xy) * 6.2831853;
         float occlusion = 0.0;
         for (int s = 0; s < AO_SAMPLES; s++)
         {
@@ -185,8 +193,8 @@ Shader "Hidden/ForestPost"
 
         // Плёночное зерно в гамма-пространстве заодно убирает полосы в тёмном тумане.
         float3 display = LinearToGammaSpace(color);
-        float grain = frac(52.9829189 * frac(dot(i.pos.xy + _GrainTime, float2(0.06711056, 0.00583715)))) - 0.5;
-        display += grain * 0.022;
+        float grain = WhiteNoise(i.pos.xy + _GrainTime) - 0.5;
+        display += grain * 0.018;
         color = GammaToLinearSpace(saturate(display));
 
         return float4(color, 1.0);

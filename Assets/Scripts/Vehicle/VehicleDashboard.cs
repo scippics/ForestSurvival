@@ -34,7 +34,7 @@ public class VehicleDashboard : MonoBehaviour
     const float WiperSlowSweep = 0.85f;
     const float WiperFastSweep = 1.5f;
     const float WiperSlowPause = 2.2f;
-    const float WiperSweepDegrees = 95f;
+    const float WiperSweepDegrees = 90f;
     const float WiperThumpVolume = 0.08f;
 
     const int MirrorWidth = 384;
@@ -219,10 +219,11 @@ public class VehicleDashboard : MonoBehaviour
         Freshener.localRotation = Quaternion.Euler(freshenerAngle, freshenerAngle * 25f % 25f, 0f);
     }
 
-    // Дворники работают от мотора: выключенные или без него дохаживают ход и ложатся на место.
+    // Дворники работают от аккумулятора, поэтому им не нужен заведённый мотор: в прологе бак пуст,
+    // а стекло протереть уже хочется. Выключенные дохаживают ход и ложатся на место.
     void UpdateWipers(float dt, bool occupied)
     {
-        int mode = occupied && controller.EngineRunning ? controller.WiperMode : VehicleController.WipersOff;
+        int mode = occupied ? controller.WiperMode : VehicleController.WipersOff;
         float angleBefore = wiperAngle;
 
         if (mode == VehicleController.WipersSlow && wiperPause > 0f)

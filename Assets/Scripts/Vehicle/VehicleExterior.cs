@@ -19,7 +19,7 @@ public static class VehicleExterior
     static readonly Color Wood = new Color(0.25f, 0.17f, 0.1f);
     static readonly Color CanColor = new Color(0.17f, 0.05f, 0.04f);
 
-    public const float WiperRestAngle = 82f;
+    public const float WiperRestAngle = 66f;
     public const float BladeInner = 0.08f;
     public const float BladeOuter = 0.58f;
 
@@ -151,7 +151,7 @@ public static class VehicleExterior
                 Box(vehicle, "GlassSeal", new Vector3(x, 0.53f, z), new Vector3(0.03f, 0.68f, 0.03f), rubber);
         }
 
-        // Дворники на осях у нижней кромки: в покое лежат почти плашмя, а в дождь ходят по стеклу.
+        // Дворники на осях у нижней кромки: в покое лежат наклонно и видны над торпедой.
         Wipers.Clear();
         foreach (float x in new[] { -0.28f, 0.48f })
         {
@@ -160,7 +160,7 @@ public static class VehicleExterior
             pivot.localPosition = new Vector3(x, 0.215f, 0.995f);
             pivot.localRotation = Quaternion.Euler(0f, 0f, WiperRestAngle);
             Tube(pivot, "WiperArm", Vector3.zero, new Vector3(0f, 0.33f, 0f), 0.006f, Clean(Dark));
-            Box(pivot, "WiperBlade", new Vector3(0f, 0.33f, 0.006f), new Vector3(0.012f, 0.5f, 0.012f), rubber);
+            Box(pivot, "WiperBlade", new Vector3(0f, 0.33f, 0.006f), new Vector3(0.02f, 0.5f, 0.016f), rubber);
             Wipers.Add(pivot);
         }
 

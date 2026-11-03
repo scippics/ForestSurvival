@@ -17,11 +17,15 @@ public class ForestPostProcess : MonoBehaviour
     const int BloomLevels = 4;
     const float AoRadius = 1.3f;
     const float AoStrength = 2.6f;
-    const float BloomThreshold = 0.85f;
-    const float BloomStrength = 0.55f;
+    const float BloomThreshold = 1f;
+    const float BloomStrength = 0.32f;
     const float RayStepFirst = 0.065f;
     const float RayStepSecond = 0.022f;
-    const float RayStrength = 0.55f;
+    const float RayStrength = 0.28f;
+
+    // На сколько солнце может уйти за край кадра (доля экрана), пока лучи плавно гаснут.
+    const float RayFadeStart = 0.15f;
+    const float RayFadeEnd = 0.8f;
     const float Exposure = 1.25f;
     const float Vignette = 1.15f;
 
@@ -143,8 +147,13 @@ public class ForestPostProcess : MonoBehaviour
         RenderTexture second = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
         second.filterMode = FilterMode.Bilinear;
 
+        // Чем дальше солнце за краем кадра, тем слабее лучи: иначе они идут почти параллельно
+        // и при повороте камеры вспыхивают и обрываются.
+        float outside = Mathf.Max(Mathf.Abs(sunPoint.x - 0.5f), Mathf.Abs(sunPoint.y - 0.5f)) - 0.5f;
+        float fade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(RayFadeStart, RayFadeEnd, outside));
+
         material.SetVector(SunViewportId, sunPoint);
-        material.SetFloat(RayStrengthId, RayStrength);
+        material.SetFloat(RayStrengthId, RayStrength * fade);
         material.SetColor(RayColorId, sun.color * sun.intensity);
 
         Graphics.Blit(source, first, material, PassRayMask);

@@ -44,7 +44,7 @@ Shader "Forest/Glass"
             // Капля, ползущая по колонке, с дорожкой мелких капель над собой. xy — сдвиг картинки, z — маска, w — блик.
             float4 Running(float2 uv, float run, float t, float scale, float visible)
             {
-                float2 cell = float2(0.085, 0.26) * scale;
+                float2 cell = float2(0.06, 0.24) * scale;
                 float2 g = uv / cell;
                 float column = floor(g.x);
                 g.y += run * (0.75 + 0.5 * Hash(float2(column, 1.0))) / cell.y + Hash(float2(column, 7.0)) * 9.0;
@@ -61,22 +61,23 @@ Shader "Forest/Glass"
 
                 float2 d = float2(st.x - x, (st.y - y) * stretch);
                 d.x *= 1.0 + saturate(d.y * 3.0) * 0.9;
-                float radius = 0.13 + 0.08 * seed;
-                float drop = smoothstep(radius, radius * 0.72, length(d));
+                float radius = 0.09 + 0.06 * seed;
+                float drop = smoothstep(radius, radius * 0.55, length(d));
 
                 float row = st.y * 9.0 + seed * 4.0;
                 float above = smoothstep(y + 0.02, y + 0.1, st.y) * smoothstep(0.5, 0.12, st.y);
                 float2 td = float2(st.x - x, (frac(row) - 0.5) / 9.0 * stretch);
-                float trail = smoothstep(0.06, 0.03, length(td)) * above * step(0.45, Hash(float2(id.x + floor(row), id.y)));
+                float trail = smoothstep(0.04, 0.015, length(td)) * above * step(0.55, Hash(float2(id.x + floor(row), id.y))) * 0.7;
 
-                float shine = drop * smoothstep(0.05, 0.015, length(d - float2(-0.05, 0.06)));
+                float shine = drop * smoothstep(0.03, 0.01, length(d - float2(-0.03, 0.04)));
                 return float4(d * drop + td * trail, saturate(drop + trail), shine);
             }
 
             // Сидящие капли: появляются, живут и сменяются новыми от следующего удара дождя.
+            // Сетка повёрнута, а размер капель сильно разный: иначе они выстраиваются ровными рядами.
             float4 Beads(float2 uv, float size, float t, float visible)
             {
-                float2 g = uv / size;
+                float2 g = float2(uv.x * 0.96 - uv.y * 0.28, uv.x * 0.28 + uv.y * 0.96) / size;
                 float2 id = floor(g);
                 float2 st = frac(g) - 0.5;
                 float seed = Hash(id);
@@ -85,10 +86,11 @@ Shader "Forest/Glass"
                 if (Hash(id + floor(life) * 0.37) >= visible)
                     return 0.0;
 
-                float2 d = st - (float2(Hash(id + 1.7), Hash(id + 2.9)) - 0.5) * 0.5;
-                float radius = 0.1 + 0.2 * Hash(id + 4.3);
-                float bead = smoothstep(radius, radius * 0.7, length(d)) * smoothstep(1.0, 0.85, frac(life));
-                float shine = bead * smoothstep(0.05, 0.015, length(d - float2(-0.03, 0.04)));
+                float2 d = st - (float2(Hash(id + 1.7), Hash(id + 2.9)) - 0.5) * 0.66;
+                float big = Hash(id + 4.3);
+                float radius = 0.05 + 0.12 * big * big;
+                float bead = smoothstep(radius, radius * 0.5, length(d)) * smoothstep(1.0, 0.85, frac(life));
+                float shine = bead * smoothstep(0.02, 0.005, length(d - float2(-0.015, 0.02)));
                 return float4(d * bead, bead, shine);
             }
 
@@ -125,15 +127,16 @@ Shader "Forest/Glass"
                     float run = front ? _ForestGlassRun : _Time.y * 0.13;
                     float t = _Time.y;
 
-                    float4 drops = Running(uv, run, t, 1.0, saturate((wet - 0.35) * 1.6) * 0.75)
-                        + Running(uv + float2(0.37, 0.11), run * 0.7, t * 0.8, 0.55, saturate((wet - 0.2) * 1.6) * 0.55)
-                        + Beads(uv, 0.026, t, saturate(wet * 1.3) * 0.8)
-                        + Beads(uv + 0.19, 0.011, t * 1.4, saturate(wet * 1.5) * 0.6);
+                    // Боковые стёкла ближе к глазам, поэтому капли на них мельче: иначе они смотрятся пузырями.
+                    float4 drops = Running(uv, run, t, front ? 1.0 : 0.6, saturate((wet - 0.35) * 1.6) * 0.5)
+                        + Running(uv + float2(0.37, 0.11), run * 0.7, t * 0.8, 0.6, saturate((wet - 0.2) * 1.6) * 0.4)
+                        + Beads(uv, front ? 0.021 : 0.014, t, saturate(wet * 1.2) * 0.68)
+                        + Beads(uv + 0.19, 0.009, t * 1.4, saturate(wet * 1.4) * 0.7);
 
                     float mask = saturate(drops.z);
-                    float3 through = tex2D(_ForestGlassGrab, i.grab.xy / i.grab.w + drops.xy * 0.35).rgb;
-                    color = lerp(color, through * 1.08 + unity_FogColor.rgb * saturate(drops.w) * 1.2, mask);
-                    alpha = max(alpha + wet * 0.02, mask);
+                    float3 through = tex2D(_ForestGlassGrab, i.grab.xy / i.grab.w + drops.xy * 0.14).rgb;
+                    color = lerp(color, through * 1.05 + unity_FogColor.rgb * saturate(drops.w) * 0.7, mask);
+                    alpha = max(alpha + wet * 0.02, mask * 0.85);
                 }
 
                 return fixed4(color, saturate(alpha));

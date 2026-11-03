@@ -75,6 +75,7 @@ public static class RuntimeBootstrapper
         var sun = new GameObject("Sun").AddComponent<Light>();
         sun.type = LightType.Directional;
         sun.shadows = LightShadows.Soft;
+        sun.shadowStrength = 0.72f;
         sun.shadowBias = 0.03f;
         sun.shadowNormalBias = 0.35f;
         sun.gameObject.AddComponent<DayNightCycle>();

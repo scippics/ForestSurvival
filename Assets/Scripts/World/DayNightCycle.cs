@@ -6,11 +6,11 @@ using UnityEngine;
 public class DayNightCycle : MonoBehaviour
 {
     const float SunYaw = -30f;
-    const float MaxIntensity = 0.95f;
+    const float MaxIntensity = 0.68f;
     const float StartTime = 0.12f;
-    const float AmbientSkyFromFog = 2.3f;
-    const float AmbientEquatorFromFog = 1.7f;
-    const float AmbientGroundFromFog = 0.9f;
+    const float AmbientSkyFromFog = 2.7f;
+    const float AmbientEquatorFromFog = 2.15f;
+    const float AmbientGroundFromFog = 1.35f;
     const float CabinFillFromFog = 1.25f;
     const float DarkSunHeight = 0.1f;
 
