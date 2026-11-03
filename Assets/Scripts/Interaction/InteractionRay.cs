@@ -67,6 +67,12 @@ public static class InteractionRay
         return hit.rigidbody != null && hit.rigidbody.TryGetComponent(out npc);
     }
 
+    public static bool IsCar(RaycastHit hit, out VehicleController vehicle)
+    {
+        vehicle = null;
+        return hit.rigidbody != null && hit.rigidbody.TryGetComponent(out vehicle);
+    }
+
     public static bool IsFreeVehicle(RaycastHit hit, out VehicleController vehicle)
     {
         vehicle = null;

@@ -336,7 +336,10 @@ public class OptimizedForestGenerator : MonoBehaviour
         GenerateNextTerrain();
         GenerateNextGrass();
         UpdateTrackedBodies();
-        Draw(view);
+
+        // Из гаража леса не видно, и рисовать его незачем.
+        if (!GarageLobby.InLobby)
+            Draw(view);
     }
 
     // В LateUpdate: к этому моменту камера и машина уже заняли положение этого кадра.

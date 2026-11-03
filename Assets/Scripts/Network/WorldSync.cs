@@ -37,6 +37,7 @@ public class WorldSync : NetworkBehaviour
 
     public bool HasClients => IsSpawned && NetworkManager.ConnectedClientsIds.Count > 1;
     public ulong DriverId => driverId.Value;
+    public bool SessionStarted => IsSpawned && sessionStarted.Value;
 
     readonly NetworkVariable<ulong> driverId = new NetworkVariable<ulong>(NoDriver);
     readonly NetworkVariable<float> timeOfDay = new NetworkVariable<float>();
@@ -44,6 +45,7 @@ public class WorldSync : NetworkBehaviour
     readonly NetworkVariable<int> storyStage = new NetworkVariable<int>();
     readonly NetworkVariable<bool> doorOpen = new NetworkVariable<bool>();
     readonly NetworkVariable<int> players = new NetworkVariable<int>(1);
+    readonly NetworkVariable<bool> sessionStarted = new NetworkVariable<bool>();
 
     readonly Dictionary<string, Rigidbody> items = new Dictionary<string, Rigidbody>();
     readonly Dictionary<string, FollowedItem> followed = new Dictionary<string, FollowedItem>();
@@ -193,6 +195,12 @@ public class WorldSync : NetworkBehaviour
             door = FindAnyObjectByType<HouseDoor>();
         if (door != null && door.IsOpen != doorOpen.Value)
             door.SetOpen(doorOpen.Value);
+    }
+
+    public void StartSession()
+    {
+        if (IsServer)
+            sessionStarted.Value = true;
     }
 
     public void AnnouncePush()

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 // Полный привод: момент идёт на все колёса, поворот — только на передние.
@@ -69,6 +69,9 @@ public class VehicleController : MonoBehaviour
     public float SteerInput => steer;
     public Transform DriverSeat { get; set; }
     public Transform PassengerSeat { get; set; }
+
+    // Места по порядку: водитель, рядом и два сзади.
+    public readonly List<Transform> Seats = new List<Transform>();
     public Transform IgnitionKey { get; set; }
     public bool IsCranking { get; set; }
     public Transform FillerCap => fillerCap;

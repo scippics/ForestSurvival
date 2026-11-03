@@ -163,8 +163,8 @@ Shader "Forest/Lit"
                 // На чёрных деталях ржавчины не видно: они пластиковые или в краске-грунте.
                 rust *= saturate(dot(albedo, float3(0.3, 0.6, 0.1)) * 30.0);
                 albedo = lerp(albedo, float3(0.05, 0.024, 0.012) * (0.6 + 0.8 * fine), rust * 0.8);
-                float scratch = smoothstep(0.76, 0.84, tex2D(_ForestNoise, float2(p.y * 3.1, p.z * 0.24 + p.x)).a);
-                albedo = lerp(albedo, albedo * 1.8 + 0.012, scratch * (1.0 - rust) * _Grime * 0.5);
+                float scratch = smoothstep(0.82, 0.9, tex2D(_ForestNoise, float2(p.y * 3.1, p.z * 1.1 + p.x)).a);
+                albedo = lerp(albedo, albedo * 1.35 + 0.006, scratch * (1.0 - rust) * _Grime * 0.35);
                 smoothness *= 1.0 - rust;
                 albedo = lerp(albedo, float3(0.016, 0.012, 0.009), mud);
                 smoothness *= (1.0 - mud) * lerp(1.0, 0.5 + fine, _Grime);

@@ -18,9 +18,13 @@ public class PlayerAvatar : NetworkBehaviour
     readonly NetworkVariable<bool> seated = new NetworkVariable<bool>(
         false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
+    readonly NetworkVariable<int> seatIndex = new NetworkVariable<int>(
+        PlayerSeat.NoSeat, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
     // Бот принадлежит серверу, как и хост: отличить своего игрока можно только вместе с IsPlayerObject.
     public bool IsLocal => IsOwner && NetworkObject.IsPlayerObject;
     public bool IsSeatedNetwork => seated.Value;
+    public int NetworkSeat => seatIndex.Value;
 
     // Кузьмич поворачивается к тому, кто подошёл. У каждого на экране к нему самому.
     public Transform FaceTarget { get; set; }
@@ -80,6 +84,8 @@ public class PlayerAvatar : NetworkBehaviour
                 look.Value = current;
             if (seated.Value != seat.IsSeated)
                 seated.Value = seat.IsSeated;
+            if (seatIndex.Value != seat.SeatIndex)
+                seatIndex.Value = seat.SeatIndex;
         }
         else if (!IsLocal)
         {

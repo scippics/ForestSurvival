@@ -58,6 +58,7 @@ public static class RuntimeBootstrapper
             NetworkBootstrap.SpawnWorld();
         }
 
+        new GameObject("GarageLobby").AddComponent<GarageLobby>();
         new GameObject("MainMenu").AddComponent<MainMenu>();
     }
 

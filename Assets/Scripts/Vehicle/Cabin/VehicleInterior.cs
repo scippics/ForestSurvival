@@ -48,6 +48,10 @@ public static class VehicleInterior
         controller.IgnitionKey = BuildIgnition(vehicle);
         controller.DriverSeat = BuildSeat(vehicle, "DriverSeatPos", -0.42f);
         controller.PassengerSeat = BuildSeat(vehicle, "PassengerSeatPos", 0.42f);
+        controller.Seats.Add(controller.DriverSeat);
+        controller.Seats.Add(controller.PassengerSeat);
+        foreach (float x in new[] { -0.42f, 0.42f })
+            controller.Seats.Add(BuildRearSeat(vehicle, x));
 
         // Слабый свет приборов на лицо панели и руки, включается вместе с фарами.
         var glow = new GameObject("DashGlow").AddComponent<Light>();
@@ -255,10 +259,10 @@ public static class VehicleInterior
         }
     }
 
-    // Замок на консоли: снизу от руля, чтобы ни обод, ни руки не закрывали ключ от водителя.
+    // Замок правее консоли: там его не закрывают от водителя ни обод, ни рука на руле.
     static Transform BuildIgnition(Transform vehicle)
     {
-        var position = new Vector3(-0.05f, 0.1f, 0.727f);
+        var position = new Vector3(0.27f, 0.17f, 0.727f);
         Knob(vehicle, "IgnitionLock", position, 0.075f, 0.012f, Inner(Chrome, SurfacePlain, 0.65f));
 
         // Узел поворачивается вокруг оси замка, и ключ поворачивается вместе с ним.
@@ -312,6 +316,16 @@ public static class VehicleInterior
         Box(dash.Freshener, "TreeMid", new Vector3(0f, -0.07f, 0f), new Vector3(0.034f, 0.03f, 0.002f), green);
         Box(dash.Freshener, "TreeTop", new Vector3(0f, -0.052f, 0f), new Vector3(0.016f, 0.03f, 0.002f), green);
         Box(dash.Freshener, "TreeStem", new Vector3(0f, -0.118f, 0f), new Vector3(0.008f, 0.02f, 0.002f), Inner(Upholstery, SurfacePlain));
+    }
+
+    // Сзади жёсткая лавка на коробе: двое ещё помещаются, хоть и низко под крышей.
+    static Transform BuildRearSeat(Transform vehicle, float x)
+    {
+        Box(vehicle, "RearCushion", new Vector3(x, 0.34f, -0.86f), new Vector3(0.5f, 0.07f, 0.42f), Inner(Upholstery, SurfaceFabric, 0.08f));
+        var point = new GameObject("RearSeatPos").transform;
+        point.SetParent(vehicle, false);
+        point.localPosition = new Vector3(x, 0.42f, -0.82f);
+        return point;
     }
 
     static Transform BuildSeat(Transform vehicle, string pointName, float x)

@@ -407,11 +407,27 @@ public class MainMenu : MonoBehaviour
         menuPanel.GetComponent<CanvasGroup>().interactable = false;
     }
 
+    // Из меню в гараж, а если сессия уже идёт, то сразу к остальным в тайгу.
     void EnterGame(bool load)
     {
         menuPanel.SetActive(false);
         view.ResetToBody();
 
+        if (WorldSync.Instance != null && WorldSync.Instance.SessionStarted)
+        {
+            BeginTaiga(load);
+            return;
+        }
+
+        GarageLobby.Instance.Enter(load);
+        playerBody.isKinematic = false;
+        view.enabled = true;
+        GameFlow.SetState(GameState.Playing);
+    }
+
+    // Гараж позади: у хоста здесь начинается пролог или загрузка, клиент просто оказывается в идущем мире.
+    public void BeginTaiga(bool load)
+    {
         if (load)
             SaveSystem.Load();
         else
@@ -446,6 +462,7 @@ public class MainMenu : MonoBehaviour
         if (state == GameState.Paused)
         {
             savedMessage.text = "";
+            SaveButton.SetInteractable(Unity.Netcode.NetworkManager.Singleton.IsServer && !GarageLobby.InLobby);
             EventSystem.current.SetSelectedGameObject(ResumeButton.gameObject);
         }
         else if (state == GameState.Menu)

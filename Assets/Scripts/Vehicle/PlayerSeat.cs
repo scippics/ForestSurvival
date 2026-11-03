@@ -9,14 +9,19 @@ public class PlayerSeat : MonoBehaviour
     const float ExitSideDistance = 1.6f;
     const float ExitGroundClearance = 1f;
 
+    public const int NoSeat = -1;
+    public const int DriverSeatIndex = 0;
+
     public VehicleController Vehicle { get; private set; }
     public bool IsSeated => Vehicle != null;
+    public int SeatIndex { get; private set; } = NoSeat;
+    public bool IsDriver => IsSeated && SeatIndex == DriverSeatIndex;
     public PushableVehicle PushZone { get; set; }
     public PlayerInputReader Input { get; private set; }
     public bool IsPouring { get; private set; }
 
     // Ключ не имеет коллайдера, чтобы не стать частью кузова: на него смотрят, а не целятся лучом.
-    public bool AimingAtKey => IsSeated && Vector3.Angle(view.transform.forward, Vehicle.IgnitionKey.position - view.transform.position) < KeyAimDegrees;
+    public bool AimingAtKey => IsDriver && Vector3.Angle(view.transform.forward, Vehicle.IgnitionKey.position - view.transform.position) < KeyAimDegrees;
 
     const float SwayPerAcceleration = 0.006f;
     const float SwayMax = 0.06f;
@@ -63,7 +68,8 @@ public class PlayerSeat : MonoBehaviour
     {
         if (IsSeated)
         {
-            Vehicle.SetDriverInput(Input.Move);
+            if (IsDriver)
+                Vehicle.SetDriverInput(Input.Move);
             UpdateSway();
         }
     }
@@ -91,28 +97,28 @@ public class PlayerSeat : MonoBehaviour
     void FixedUpdate()
     {
         // Ручник защёлкивается и остаётся после выхода: машину можно оставить на склоне.
-        if (IsSeated && Input.ConsumeSpace())
+        if (IsDriver && Input.ConsumeSpace())
         {
             Vehicle.HandbrakeOn = !Vehicle.HandbrakeOn;
             ForestAudio.Play(ForestSound.Ratchet, 0.6f);
         }
 
         bool wipersPressed = Input.ConsumeWipers();
-        if (IsSeated && wipersPressed)
+        if (IsDriver && wipersPressed)
         {
             Vehicle.CycleWipers();
             ForestAudio.Play(ForestSound.Click, 0.5f);
         }
 
         bool headlightsPressed = Input.ConsumeHeadlights();
-        if (IsSeated && headlightsPressed)
+        if (IsDriver && headlightsPressed)
         {
             Vehicle.SetLights(!Vehicle.LightsOn);
             ForestAudio.Play(ForestSound.Click, 0.5f);
         }
 
         bool recoverPressed = Input.ConsumeRecover();
-        if (IsSeated && recoverPressed && Vehicle.IsOverturned)
+        if (IsDriver && recoverPressed && Vehicle.IsOverturned)
             Vehicle.RecoverUpright();
 
         bool interactPressed = Input.ConsumeInteract();
@@ -128,8 +134,31 @@ public class PlayerSeat : MonoBehaviour
 
         if (IsSeated)
             Exit();
-        else if (InteractionRay.Cast(view.transform, out RaycastHit hit) && InteractionRay.IsFreeVehicle(hit, out VehicleController target))
-            Enter(target);
+        else if (InteractionRay.Cast(view.transform, out RaycastHit hit) && InteractionRay.IsCar(hit, out VehicleController target))
+        {
+            int free = ChooseSeat(target);
+            if (free != NoSeat)
+                Enter(target, free);
+        }
+    }
+
+    // За руль садится первый, остальные рядом и сзади. В гараже руль за хостом: он и заводит.
+    public int ChooseSeat(VehicleController target)
+    {
+        bool hostOnly = GarageLobby.InLobby && !Unity.Netcode.NetworkManager.Singleton.IsServer;
+        if (!target.IsOccupied && !hostOnly)
+            return DriverSeatIndex;
+
+        PlayerAvatar[] avatars = FindObjectsByType<PlayerAvatar>(FindObjectsSortMode.None);
+        for (int candidate = DriverSeatIndex + 1; candidate < target.Seats.Count; candidate++)
+        {
+            bool taken = false;
+            foreach (PlayerAvatar avatar in avatars)
+                taken |= avatar.NetworkSeat == candidate;
+            if (!taken)
+                return candidate;
+        }
+        return NoSeat;
     }
 
     void StopCranking()
@@ -248,7 +277,7 @@ public class PlayerSeat : MonoBehaviour
         return canPour;
     }
 
-    public void Enter(VehicleController target)
+    public void Enter(VehicleController target, int seatIndex = DriverSeatIndex)
     {
         ForestAudio.Play(ForestSound.Door, 0.7f);
         hands.ReleaseHeld();
@@ -265,10 +294,14 @@ public class PlayerSeat : MonoBehaviour
 
         view.EnterSeat();
         transform.SetParent(target.transform, false);
-        transform.SetLocalPositionAndRotation(target.DriverSeat.localPosition + SeatedBodyOffset, Quaternion.identity);
+        transform.SetLocalPositionAndRotation(target.Seats[seatIndex].localPosition + SeatedBodyOffset, Quaternion.identity);
+
+        Vehicle = target;
+        SeatIndex = seatIndex;
+        if (!IsDriver)
+            return;
 
         target.Driver = this;
-        Vehicle = target;
         if (WorldSync.Instance != null)
             WorldSync.Instance.SetLocalDriver(true);
 
@@ -284,12 +317,15 @@ public class PlayerSeat : MonoBehaviour
         ForestAudio.Play(ForestSound.Door, 0.7f);
 
         Rigidbody vehicleBody = Vehicle.GetComponent<Rigidbody>();
-        Vehicle.SetDriverInput(Vector2.zero);
-        Vehicle.Driver = null;
-        Vehicle.EngineOn = false;
-        Vehicle.IsCranking = false;
-        if (WorldSync.Instance != null)
-            WorldSync.Instance.SetLocalDriver(false);
+        if (IsDriver)
+        {
+            Vehicle.SetDriverInput(Vector2.zero);
+            Vehicle.Driver = null;
+            Vehicle.EngineOn = false;
+            Vehicle.IsCranking = false;
+            if (WorldSync.Instance != null)
+                WorldSync.Instance.SetLocalDriver(false);
+        }
 
         view.ExitSeat(Vehicle.transform.eulerAngles.y);
         transform.SetParent(null, false);
@@ -304,6 +340,7 @@ public class PlayerSeat : MonoBehaviour
         movement.enabled = true;
         hands.enabled = true;
         Vehicle = null;
+        SeatIndex = NoSeat;
     }
 
     bool TryFindExit(out Vector3 exit)
@@ -313,7 +350,7 @@ public class PlayerSeat : MonoBehaviour
         foreach (float side in ExitSides)
         {
             exit = vehicle.position + vehicle.right * (side * ExitSideDistance);
-            exit.y = OptimizedForestGenerator.TerrainHeight(exit.x, exit.z) + ExitGroundClearance;
+            exit.y = GarageLobby.GroundHeight(exit.x, exit.z) + ExitGroundClearance;
             bool blocked = Physics.CheckCapsule(exit + Vector3.up * half, exit - Vector3.up * half, capsule.radius,
                 Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             if (!blocked)

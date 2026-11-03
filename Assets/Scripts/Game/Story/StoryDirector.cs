@@ -75,7 +75,8 @@ public class StoryDirector : MonoBehaviour
         car.SetFuel(0f);
         car.HandbrakeOn = true;
         cycle.TimeOfDay = IntroTimeOfDay;
-        seat.Enter(car);
+        if (!seat.IsSeated)
+            seat.Enter(car);
         car.SetLights(false);
 
         Stage = StoryStage.Intro;

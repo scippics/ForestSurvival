@@ -227,9 +227,9 @@ public class InteractionUI : MonoBehaviour
             outlined = hit.rigidbody.transform;
             return KeyGrab;
         }
-        if (InteractionRay.IsFreeVehicle(hit, out VehicleController free))
+        if (InteractionRay.IsCar(hit, out VehicleController boarding) && seat.ChooseSeat(boarding) != PlayerSeat.NoSeat)
         {
-            outlined = free.transform;
+            outlined = boarding.transform;
             outlinedPart = DoorPartName;
             return KeyInteract;
         }
