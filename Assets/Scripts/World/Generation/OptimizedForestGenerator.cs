@@ -119,7 +119,9 @@ public class OptimizedForestGenerator : MonoBehaviour
     const double WreckBatteryChance = 0.25;
     const double WreckPadChance = 0.45;
     const double WreckByRoadChance = 0.6;
-    const float CrownLodDistance = 30f;
+    // Те же числа в CustomWindFoliage.shader.
+    const float CrownFadeStart = 26f;
+    const float CrownFadeEnd = 34f;
     const float LodRefreshDistance = 4f;
 
     public int ActiveChunks => chunks.Count;
@@ -221,6 +223,8 @@ public class OptimizedForestGenerator : MonoBehaviour
     {
         public Mesh CrownNear;
         public Mesh CrownFar;
+        public Material CrownFadeNear;
+        public Material CrownFadeFar;
         public Material Trunk;
         public Material Crown;
     }
@@ -266,6 +270,14 @@ public class OptimizedForestGenerator : MonoBehaviour
         deadTrunk.SetFloat("_Bark", 1f);
         Mesh deadBranches = ForestMeshes.BuildDeadBranches();
         treeKinds[SpeciesDead] = new TreeKind { CrownNear = deadBranches, CrownFar = deadBranches, Trunk = deadTrunk, Crown = deadTrunk };
+
+        foreach (TreeKind kind in treeKinds)
+        {
+            kind.CrownFadeNear = new Material(kind.Crown);
+            kind.CrownFadeNear.SetFloat("_LodSide", 1f);
+            kind.CrownFadeFar = new Material(kind.Crown);
+            kind.CrownFadeFar.SetFloat("_LodSide", -1f);
+        }
 
         grassMaterial = CreateFoliageMaterial(GrassColor, 0.08f, 0.03f);
         grassMaterial.SetFloat("_Grass", 1f);
@@ -1261,7 +1273,9 @@ public class OptimizedForestGenerator : MonoBehaviour
             return;
         chunk.LodEye = eye;
 
-        float limit = CrownLodDistance * CrownLodDistance;
+        // Полосы перекрываются с запасом на шаг обновления: в зоне растворения дерево есть в обоих списках.
+        float closeLimit = (CrownFadeEnd + LodRefreshDistance) * (CrownFadeEnd + LodRefreshDistance);
+        float farLimit = (CrownFadeStart - LodRefreshDistance) * (CrownFadeStart - LodRefreshDistance);
         for (int species = 0; species < SpeciesCount; species++)
         {
             int close = 0, far = 0;
@@ -1270,9 +1284,10 @@ public class OptimizedForestGenerator : MonoBehaviour
             {
                 float dx = trees[i].m03 - eye.x;
                 float dz = trees[i].m23 - eye.z;
-                if (dx * dx + dz * dz < limit)
+                float distanceSq = dx * dx + dz * dz;
+                if (distanceSq < closeLimit)
                     chunk.LodClose[species][close++] = trees[i];
-                else
+                if (distanceSq > farLimit)
                     chunk.LodFar[species][far++] = trees[i];
             }
             chunk.LodCloseCounts[species] = close;
@@ -1302,13 +1317,12 @@ public class OptimizedForestGenerator : MonoBehaviour
                 continue;
             }
 
+            // Тень у всех одна, от дальней модели: она не меняется при смене, и никаких скачков на земле нет.
+            Graphics.DrawMeshInstanced(kind.CrownFar, 0, kind.Crown, chunk.Species[species], count, null, ShadowCastingMode.ShadowsOnly, false);
             if (chunk.LodCloseCounts[species] > 0)
-            {
-                Graphics.DrawMeshInstanced(kind.CrownNear, 0, kind.Crown, chunk.LodClose[species], chunk.LodCloseCounts[species], null, ShadowCastingMode.Off, true);
-                Graphics.DrawMeshInstanced(kind.CrownFar, 0, kind.Crown, chunk.LodClose[species], chunk.LodCloseCounts[species], null, ShadowCastingMode.ShadowsOnly, false);
-            }
+                Graphics.DrawMeshInstanced(kind.CrownNear, 0, kind.CrownFadeNear, chunk.LodClose[species], chunk.LodCloseCounts[species], null, ShadowCastingMode.Off, true);
             if (chunk.LodFarCounts[species] > 0)
-                Graphics.DrawMeshInstanced(kind.CrownFar, 0, kind.Crown, chunk.LodFar[species], chunk.LodFarCounts[species], null, ShadowCastingMode.On, true);
+                Graphics.DrawMeshInstanced(kind.CrownFar, 0, kind.CrownFadeFar, chunk.LodFar[species], chunk.LodFarCounts[species], null, ShadowCastingMode.Off, true);
         }
 
         if (chunk.RockCount > 0)

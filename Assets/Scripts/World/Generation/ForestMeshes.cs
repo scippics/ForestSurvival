@@ -7,8 +7,9 @@ using UnityEngine;
 public static class ForestMeshes
 {
     const int TrunkSides = 8;
-    const int CrownSides = 14;
-    const int CrownTiers = 7;
+    const int FarCoreSides = 6;
+    const int FarBoughSteps = 3;
+    const float FarBoughWidth = 2.1f;
     const int CoreSides = 9;
     const int CoreTiers = 7;
     const float CoreShade = 0.4f;
@@ -45,15 +46,16 @@ public static class ForestMeshes
         return builder.ToMesh("Trunk");
     }
 
-    // Ель. Вблизи это сотни отдельных провисших лап вокруг тёмной сердцевины: контур рваный,
-    // а сквозь него видно небо. Издалека лапы неразличимы, и дальним деревьям хватает зубчатых ярусов.
+    // Ель: провисшие лапы вокруг тёмной сердцевины, контур рваный, а сквозь него видно небо. Дальняя модель
+    // устроена так же, только лап меньше и они шире, поэтому при смене почти не меняются ни форма, ни тень.
     public static Mesh BuildCrown(bool lowDetail)
     {
         var builder = new MeshBuilder();
         var random = new System.Random(Seed + 1);
         if (lowDetail)
         {
-            AddBranchTiers(builder, random, 0.17f, 0.82f, 0.86f, 0.1f, CrownTiers, CrownSides);
+            AddBranchTiers(builder, random, 0.2f, 0.84f, 0.5f, 0.07f, CoreTiers, FarCoreSides, CoreShade);
+            AddBoughs(builder, random, 0.2f, 0.95f, 0.78f, 0.08f, 13, 8, 0.07f, FarBoughSteps, FarBoughWidth);
         }
         else
         {
@@ -89,7 +91,8 @@ public static class ForestMeshes
         var random = new System.Random(Seed + 11);
         if (lowDetail)
         {
-            AddBranchTiers(builder, random, 0.62f, 0.9f, 1.05f, 0.34f, 3, 9);
+            AddBranchTiers(builder, random, 0.66f, 0.9f, 0.6f, 0.2f, 4, FarCoreSides, CoreShade);
+            AddBoughs(builder, random, 0.6f, 0.98f, 1.1f, 0.3f, 7, 8, 0.03f, FarBoughSteps, FarBoughWidth);
         }
         else
         {
@@ -120,20 +123,17 @@ public static class ForestMeshes
             return builder.ToMesh("Birch");
         }
 
-        int lumps = 5;
-        int rings = 3;
-        int sides = 5;
-        for (int i = 0; i < lumps; i++)
+        for (int i = 0; i < 5; i++)
         {
-            float t = (i + 0.5f) / lumps;
-            float height = Mathf.Lerp(0.42f, 0.95f, t);
+            float t = (i + 0.5f) / 5f;
             float angle = (float)random.NextDouble() * Mathf.PI * 2f;
-            float reach = Mathf.Lerp(0.95f, 0.1f, t * t) * ((float)random.NextDouble() * 0.5f + 0.5f);
-            float size = Mathf.Lerp(1.2f, 0.6f, t);
-            var center = new Vector3(Mathf.Cos(angle) * reach, height, Mathf.Sin(angle) * reach);
-            AddBlob(builder, random, center, new Vector3(size, size * 0.14f, size), rings, sides);
+            float reach = Mathf.Lerp(0.5f, 0.1f, t) * ((float)random.NextDouble() * 0.5f + 0.5f);
+            var center = new Vector3(Mathf.Cos(angle) * reach, Mathf.Lerp(0.5f, 0.92f, t), Mathf.Sin(angle) * reach);
+            float size = Mathf.Lerp(0.36f, 0.2f, t);
+            AddBlob(builder, random, center, new Vector3(size, size * 0.14f, size), 3, 5);
         }
-        return builder.ToMesh(lowDetail ? "BirchLow" : "Birch");
+        AddBoughs(builder, random, 0.42f, 0.98f, 1.15f, 0.28f, 9, 6, 0.2f, FarBoughSteps, FarBoughWidth);
+        return builder.ToMesh("BirchLow");
     }
 
     public static Mesh BuildBush()
@@ -167,7 +167,7 @@ public static class ForestMeshes
         return builder.ToMesh("Stump");
     }
 
-    static void AddBoughs(MeshBuilder builder, System.Random random, float bottom, float top, float firstLength, float lastLength, int whorls, int boughs, float droop, int steps = BoughSteps)
+    static void AddBoughs(MeshBuilder builder, System.Random random, float bottom, float top, float firstLength, float lastLength, int whorls, int boughs, float droop, int steps = BoughSteps, float widthScale = 1f)
     {
         for (int whorl = 0; whorl < whorls; whorl++)
         {
@@ -181,17 +181,17 @@ public static class ForestMeshes
             {
                 float angle = twist + (i + ((float)random.NextDouble() - 0.5f) * 0.6f) * Mathf.PI * 2f / count;
                 float jitter = 0.8f + (float)random.NextDouble() * 0.4f;
-                AddBough(builder, random, angle, height + ((float)random.NextDouble() - 0.5f) * 0.012f, length * jitter, droop * jitter, steps);
+                AddBough(builder, random, angle, height + ((float)random.NextDouble() - 0.5f) * 0.012f, length * jitter, droop * jitter, steps, widthScale);
             }
         }
     }
 
     // Лапа: прогнутый вниз черенок и перья хвои по обе стороны, каждое своим треугольником.
-    static void AddBough(MeshBuilder builder, System.Random random, float angle, float height, float length, float droop, int steps)
+    static void AddBough(MeshBuilder builder, System.Random random, float angle, float height, float length, float droop, int steps, float widthScale = 1f)
     {
         var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
         var side = new Vector3(-radial.z, 0f, radial.x);
-        float width = length * BoughWidth;
+        float width = length * BoughWidth * widthScale;
 
         Vector3 Spine(float t) => radial * (length * (0.06f + t * 0.94f)) + Vector3.up * (height - droop * t * t);
 

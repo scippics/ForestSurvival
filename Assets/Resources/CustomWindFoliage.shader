@@ -15,6 +15,7 @@ Shader "Forest/CustomWindFoliage"
         _Grass ("Grass", Range(0, 1)) = 0
         _Moss ("Moss", Range(0, 1)) = 0
         _Birch ("Birch Bark", Range(0, 1)) = 0
+        _LodSide ("LOD Side", Float) = 0
     }
     SubShader
     {
@@ -24,7 +25,7 @@ Shader "Forest/CustomWindFoliage"
 
         CGPROGRAM
         #pragma surface surf Standard vertex:vert fullforwardshadows addshadow
-        #pragma target 3.0
+        #pragma target 3.5
         #pragma multi_compile_instancing
 
         #include "ForestDynamicLights.cginc"
@@ -38,6 +39,8 @@ Shader "Forest/CustomWindFoliage"
             float variation;
             float height;
             float2 treeOrigin;
+            float4 screenPos;
+            float lodKeep;
         };
 
         sampler2D _ForestNoise;
@@ -48,6 +51,11 @@ Shader "Forest/CustomWindFoliage"
         float _WindSpeed;
         float _FlutterStrength;
         half _Bark, _Needles, _Grass, _Moss, _Birch;
+
+        // 1 — ближняя модель кроны, -1 — дальняя, 0 — без смены. В полосе расстояний они растворяются друг в друге.
+        float _LodSide;
+        #define LOD_FADE_START 26.0
+        #define LOD_FADE_END 34.0
 
         // xy — куда дует, z — сила: её считает погода, в дождь она больше.
         float4 _ForestWind;
@@ -88,12 +96,21 @@ Shader "Forest/CustomWindFoliage"
             o.variation = frac(sin(dot(origin.xz, float2(12.9898, 78.233))) * 43758.5453);
             o.height = height;
             o.treeOrigin = origin.xz;
+            o.lodKeep = smoothstep(LOD_FADE_START, LOD_FADE_END, distance(origin.xz, _WorldSpaceCameraPos.xz));
         }
 
         float _ForestRain;
 
         void surf(Input IN, inout SurfaceOutputStandard o)
         {
+            if (_LodSide != 0)
+            {
+                // Один и тот же шум у обеих моделей: каждый пиксель показывает ровно одну из них, дыр не бывает.
+                float2 pixel = IN.screenPos.xy / max(IN.screenPos.w, 0.0001) * _ScreenParams.xy;
+                float dither = frac(52.9829189 * frac(dot(floor(pixel), float2(0.06711056, 0.00583715))));
+                clip(_LodSide > 0 ? dither - IN.lodKeep : IN.lodKeep - dither);
+            }
+
             float3 albedo = UNITY_ACCESS_INSTANCED_PROP(FoliageProps, _Color).rgb;
             float occlusion = IN.color.r;
             float tip = IN.color.g;
