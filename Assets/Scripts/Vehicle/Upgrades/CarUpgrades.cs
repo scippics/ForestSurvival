@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 
 // Модернизация нашей машины: в каждом гнезде одна деталь. Всё, что деталь даёт, идёт через настоящие
@@ -48,7 +47,6 @@ public class CarUpgrades : MonoBehaviour
     VehicleController car;
     Rigidbody body;
     ParticleSystem smoke;
-    bool warnedEngine;
 
     // Удар о твёрдое: скорость выше порога калечит машину, а броня забирает часть удара на себя.
     void OnCollisionEnter(Collision collision)
@@ -65,20 +63,13 @@ public class CarUpgrades : MonoBehaviour
         if (damage > StallDamage && car.EngineOn)
         {
             car.EngineOn = false;
-            StoryUI.Instance.Say("От удара заглох мотор.");
-        }
-        if (car.Condition < SmokeCondition && !warnedEngine && car.Driver != null)
-        {
-            warnedEngine = true;
-            StoryUI.Instance.Say("Мотор застучал и тянет слабее. Нужен ремонт.");
+            ForestAudio.Play(ForestSound.Stall, 0.7f);
         }
     }
 
     public void Repair()
     {
         car.Condition = Mathf.Min(1f, car.Condition + RepairAmount);
-        if (car.Condition >= SmokeCondition)
-            warnedEngine = false;
     }
 
     void Update()
@@ -298,15 +289,4 @@ public class CarUpgrades : MonoBehaviour
         car.ApplyUpgrades(torque, speed, grip, tank, burn);
     }
 
-    public string Describe()
-    {
-        var text = new StringBuilder();
-        text.Append("Масса ").Append(Mathf.RoundToInt(body.mass)).Append(" кг, бак ").Append(Mathf.RoundToInt(car.TankSize)).Append(" л, защита ").Append(Mathf.RoundToInt(ArmorTotal)).Append('\n');
-        text.Append("Состояние ").Append(Mathf.RoundToInt(car.Condition * 100f)).Append("%, аккумулятор ").Append(Mathf.RoundToInt(car.Battery * 100f)).Append("%\n");
-        if (mounted.Count == 0)
-            text.Append("всё заводское\n");
-        foreach (KeyValuePair<CarSlot, CarPartKind> pair in mounted)
-            text.Append("- ").Append(CarParts.SlotName(pair.Key)).Append(": ").Append(CarParts.Info[pair.Value].Name).Append('\n');
-        return text.ToString();
-    }
 }

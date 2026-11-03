@@ -29,6 +29,8 @@ public static class VehicleInterior
     static readonly Color HandbrakeLamp = new Color(1f, 0.08f, 0.05f);
     static readonly Color HeadlightLamp = new Color(0.15f, 0.9f, 0.3f);
     static readonly Color FuelLamp = new Color(1f, 0.6f, 0.05f);
+    static readonly Color BatteryLamp = new Color(1f, 0.1f, 0.06f);
+    static readonly Color EngineLamp = new Color(1f, 0.45f, 0.04f);
 
     static Mesh wheelRing;
 
@@ -43,6 +45,7 @@ public static class VehicleInterior
         BuildConsole(vehicle, dash);
         BuildMirror(vehicle, dash);
 
+        controller.IgnitionKey = BuildIgnition(vehicle);
         controller.DriverSeat = BuildSeat(vehicle, "DriverSeatPos", -0.42f);
         controller.PassengerSeat = BuildSeat(vehicle, "PassengerSeatPos", 0.42f);
 
@@ -138,6 +141,10 @@ public static class VehicleInterior
         dash.HandbrakeLamp = BuildWarningLamp(vehicle, new Vector3(-0.42f, 0.325f, 0.727f));
         dash.HeadlightLamp = BuildWarningLamp(vehicle, new Vector3(-0.42f, 0.29f, 0.727f));
         dash.FuelLamp = BuildWarningLamp(vehicle, new Vector3(-0.42f, 0.255f, 0.727f));
+        dash.BatteryLamp = BuildWarningLamp(vehicle, new Vector3(-0.448f, 0.325f, 0.727f));
+        dash.EngineLamp = BuildWarningLamp(vehicle, new Vector3(-0.448f, 0.29f, 0.727f));
+        dash.BatteryOnColor = BatteryLamp;
+        dash.EngineOnColor = EngineLamp;
         dash.HandbrakeOnColor = HandbrakeLamp;
         dash.HeadlightOnColor = HeadlightLamp;
         dash.FuelOnColor = FuelLamp;
@@ -246,6 +253,21 @@ public static class VehicleInterior
             // Локоть ниже и шире плеч: так предплечье не лезет в лицо и не закрывает приборы.
             dash.AddArm(hand, arm.transform, new Vector3(-0.42f + side * 0.3f, 0.14f, 0.06f));
         }
+    }
+
+    // Замок на консоли: снизу от руля, чтобы ни обод, ни руки не закрывали ключ от водителя.
+    static Transform BuildIgnition(Transform vehicle)
+    {
+        var position = new Vector3(-0.05f, 0.1f, 0.727f);
+        Knob(vehicle, "IgnitionLock", position, 0.075f, 0.012f, Inner(Chrome, SurfacePlain, 0.65f));
+
+        // Узел поворачивается вокруг оси замка, и ключ поворачивается вместе с ним.
+        var key = new GameObject("IgnitionKey").transform;
+        key.SetParent(vehicle, false);
+        key.localPosition = position + Vector3.back * 0.006f;
+        Box(key, "KeyBlade", new Vector3(0f, 0f, -0.024f), new Vector3(0.018f, 0.005f, 0.05f), Inner(Chrome, SurfacePlain, 0.75f));
+        Box(key, "KeyBow", new Vector3(0f, 0f, -0.066f), new Vector3(0.075f, 0.02f, 0.05f), Inner(ToolboxColor, SurfacePlain, 0.4f));
+        return key;
     }
 
     static void BuildConsole(Transform vehicle, VehicleDashboard dash)

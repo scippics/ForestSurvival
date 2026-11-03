@@ -17,13 +17,11 @@ public class RoadBlock : MonoBehaviour
     const float ColliderHeight = 0.95f;
     const float RamSpeed = 3f;
     const float BullBarSpeed = 6f;
-    const float WarnDistance = 16f;
     const float FreeLift = 0.2f;
 
     static readonly Color BarkColor = new Color(0.17f, 0.12f, 0.08f);
     static readonly Color NeedleColor = new Color(0.07f, 0.13f, 0.07f);
 
-    static bool warned;
     static Mesh bough;
     static Mesh Bough => bough != null ? bough : bough = ForestMeshes.BuildLooseBough();
 
@@ -144,15 +142,4 @@ public class RoadBlock : MonoBehaviour
             WorldSync.Instance.SendItem(body);
     }
 
-    void Update()
-    {
-        if (warned || !IsLodged)
-            return;
-        Camera view = Camera.main;
-        if (view != null && (view.transform.position - transform.position).sqrMagnitude < WarnDistance * WarnDistance)
-        {
-            warned = true;
-            StoryUI.Instance.Say("Просеку перегородило. Придётся выйти и оттащить.");
-        }
-    }
 }

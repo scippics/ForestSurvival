@@ -88,7 +88,6 @@ public static class StoryText
     public const string GoalDrive = "Ехать на север по просеке, к старой стоянке лесорубов.";
     public const string GoalRiver = "Савельев ушёл к реке. Дальше на север.";
 
-    public const string StartHint = "Бензин есть. За руль и завести: зажать K, пока не схватит.";
 
     public const string KordonNoteId = "kordon";
     public const string CampNoteId = "camp";

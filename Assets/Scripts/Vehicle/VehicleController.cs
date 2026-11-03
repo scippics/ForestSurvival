@@ -59,6 +59,9 @@ public class VehicleController : MonoBehaviour
     public float SteerInput => steer;
     public Transform DriverSeat { get; set; }
     public Transform PassengerSeat { get; set; }
+    public Transform IgnitionKey { get; set; }
+    public bool IsCranking { get; set; }
+    public Transform FillerCap => fillerCap;
     public float ForwardSpeed => Vector3.Dot(body.linearVelocity, transform.forward);
     public float SteerAngle => currentSteer;
     public float Throttle => throttle;

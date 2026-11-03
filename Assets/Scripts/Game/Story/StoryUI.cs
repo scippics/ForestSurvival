@@ -12,12 +12,6 @@ public class StoryUI : MonoBehaviour
     const float SubtitleMinSeconds = 3f;
 
     static readonly Vector2 DialogueSize = new Vector2(1200f, 370f);
-    static readonly Vector2 BarSize = new Vector2(640f, 24f);
-    const float BarSeconds = 0.12f;
-    static readonly Color BarNeutral = new Color(0.82f, 0.72f, 0.46f);
-    static readonly Color BarZone = new Color(0.25f, 0.62f, 0.3f, 0.75f);
-    static readonly Color BarHit = new Color(0.45f, 0.9f, 0.45f);
-    static readonly Color BarOver = new Color(0.86f, 0.3f, 0.2f);
 
     static readonly Color CardColor = new Color(0.82f, 0.82f, 0.78f);
     static readonly Color TitleColor = new Color(0.9f, 0.88f, 0.82f);
@@ -31,8 +25,6 @@ public class StoryUI : MonoBehaviour
     public bool NoteOpen => paper.activeSelf;
     public bool NotebookOpen => notebook.activeSelf;
     public bool DialogueOpen => dialogue.activeSelf;
-    public bool BarVisible => bar.activeSelf;
-    public float BarValue { get; private set; }
     public string DialogueLine => dialogueText.text;
     public string Goal { get; private set; } = "";
     public string CurrentSubtitle => subtitle.text;
@@ -52,12 +44,6 @@ public class StoryUI : MonoBehaviour
     GameObject paper;
     GameObject notebook;
     GameObject dialogue;
-    GameObject bar;
-    RectTransform barFill;
-    RectTransform barZone;
-    Image barFillImage;
-    Text barLabel;
-    float barUntil;
     float subtitleUntil;
     float subtitleStart;
 
@@ -106,8 +92,6 @@ public class StoryUI : MonoBehaviour
         Place(dialogueText.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, DialogueSize - new Vector2(60f, 40f));
         dialogue.SetActive(false);
 
-        BuildBar(root);
-
         black = AddImage(root, "Black", Color.black);
         Stretch(black.rectTransform);
         black.color = Color.clear;
@@ -132,57 +116,9 @@ public class StoryUI : MonoBehaviour
         subtitle.text = "";
     }
 
-    void BuildBar(Transform root)
-    {
-        bar = AddPanel(root, "Bar", new Color(0f, 0f, 0f, 0.62f), BarSize + new Vector2(10f, 10f));
-        Place(bar.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0f, -190f), BarSize + new Vector2(10f, 10f));
-
-        Image zone = AddImage(bar.transform, "BarZone", BarZone);
-        barZone = zone.rectTransform;
-        barFillImage = AddImage(bar.transform, "BarFill", BarNeutral);
-        barFill = barFillImage.rectTransform;
-        foreach (RectTransform rect in new[] { barZone, barFill })
-        {
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
-            rect.pivot = new Vector2(0f, 0.5f);
-        }
-
-        barLabel = AddText(bar.transform, "BarLabel", 24, CardColor, FontStyle.Normal);
-        Place(barLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 34f), new Vector2(1000f, 36f));
-        bar.SetActive(false);
-    }
-
-    // Шкала живёт, пока её вызывают: зелёная зона есть только там, где надо попасть вовремя.
-    public void ShowBar(string label, float value, float zoneMin = -1f, float zoneMax = -1f)
-    {
-        BarValue = Mathf.Clamp01(value);
-        barUntil = Time.unscaledTime + BarSeconds;
-        barLabel.text = label;
-        bar.SetActive(true);
-
-        barFill.anchoredPosition = new Vector2(5f, 0f);
-        barFill.sizeDelta = new Vector2(BarSize.x * BarValue, BarSize.y);
-
-        bool hasZone = zoneMin >= 0f;
-        barZone.gameObject.SetActive(hasZone);
-        if (hasZone)
-        {
-            barZone.anchoredPosition = new Vector2(5f + BarSize.x * zoneMin, 0f);
-            barZone.sizeDelta = new Vector2(BarSize.x * (zoneMax - zoneMin), BarSize.y + 8f);
-            barFillImage.color = BarValue > zoneMax ? BarOver : BarValue >= zoneMin ? BarHit : BarNeutral;
-        }
-        else
-        {
-            barFillImage.color = BarNeutral;
-        }
-    }
-
     void Update()
     {
         float now = Time.unscaledTime;
-        if (now > barUntil && bar.activeSelf)
-            bar.SetActive(false);
-
         if (now >= subtitleUntil)
         {
             if (subtitles.Count > 0)
@@ -282,8 +218,6 @@ public class StoryUI : MonoBehaviour
         var text = new StringBuilder();
         text.Append("<b>Задача</b>\n");
         text.Append(string.IsNullOrEmpty(Goal) ? StoryText.NoGoal : Goal);
-        if (CarUpgrades.Instance != null)
-            text.Append("\n\n<b>Машина</b>\n").Append(CarUpgrades.Instance.Describe());
         text.Append("\n\n<b>").Append(StoryText.RecipesHeader).Append("</b>\n");
         if (recipes.Count == 0)
             text.Append(StoryText.RecipesEmpty);

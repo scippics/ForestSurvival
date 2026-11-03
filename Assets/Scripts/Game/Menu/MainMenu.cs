@@ -187,7 +187,7 @@ public class MainMenu : MonoBehaviour
         Place(savedMessage.rectTransform, 146f, 280f, 800f, 40f);
 
         Text controls = CreateText(pausePanel.transform, "Controls",
-            "WASD - идти или ехать     Пробел - прыжок, ручник     ЛКМ / ПКМ - взять, бросить     E - машина, залить бензин     F - толкать\nT - фонарик     L - фары     R - поставить на колёса     Tab - блокнот",
+            "WASD - идти или ехать     Пробел - прыжок, ручник     ЛКМ / ПКМ - взять, бросить     E - машина, ключ зажигания, залить бензин     F - толкать\nG - ключ     T - фонарик     L - фары     V - дворники     R - поставить на колёса     Tab - блокнот",
             22, HintColor, FontStyle.Normal);
         Place(controls.rectTransform, 146f, 70f, 1500f, 80f);
 
@@ -228,14 +228,27 @@ public class MainMenu : MonoBehaviour
         });
         SetScreenLabel(screen, Screen.fullScreen);
 
-        MenuButton back = CreateButton(settingsPanel.transform, "НАЗАД", 300f, CloseSubPanel);
-        Navigate(quality, screen, back);
+        MenuButton limit = null;
+        limit = CreateButton(settingsPanel.transform, "", 330f, () =>
+        {
+            GameSettings.FrameLimit = (GameSettings.FrameLimit + 1) % GameSettings.FrameLimitNames.Length;
+            SetLimitLabel(limit);
+        });
+        SetLimitLabel(limit);
+
+        MenuButton back = CreateButton(settingsPanel.transform, "НАЗАД", 230f, CloseSubPanel);
+        Navigate(quality, screen, limit, back);
         settingsPanel.SetActive(false);
     }
 
     static void SetQualityLabel(MenuButton button)
     {
         button.GetComponentInChildren<Text>().text = "КАЧЕСТВО: " + GameSettings.QualityNames[GameSettings.Quality];
+    }
+
+    static void SetLimitLabel(MenuButton button)
+    {
+        button.GetComponentInChildren<Text>().text = "ПРЕДЕЛ FPS: " + GameSettings.FrameLimitNames[GameSettings.FrameLimit];
     }
 
     static void SetScreenLabel(MenuButton button, bool fullScreen)

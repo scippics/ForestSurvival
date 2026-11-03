@@ -1,69 +1,59 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-// Вешается на камеру: точка прицела и контекстная подсказка под ней.
+// Вешается на камеру: точка прицела, а под взглядом на предмет вместо неё значок клавиши и кайма на предмете.
+// Никаких текстов: что с предметом можно сделать, игрок узнаёт из самой клавиши.
 public class InteractionUI : MonoBehaviour
 {
-    const string PromptTake = "ЛКМ - Взять";
-    const string PromptPush = "F - Толкать машину";
-    const string PromptTransfer = "Зажать ЛКМ - Подсосать бензин";
-    const string PromptHolding = "ЛКМ - Отпустить, ПКМ - Бросить";
-    const string PromptRead = "ЛКМ - Читать";
-    const string PromptDoorOpen = "ЛКМ - Открыть дверь";
-    const string PromptDoorClose = "ЛКМ - Закрыть дверь";
-    const string PromptTalk = "ЛКМ - Поговорить";
-    const string PromptCloseNote = "ЛКМ - Убрать записку";
-    const string PromptPour = "Зажать E - Залить в бак: ";
-    const string PromptNoFuel = "Бак пуст: мотор не заведётся\n";
-    const string PromptStart = "Зажать K - Завести мотор\n";
-    const string PromptDrag = "ЛКМ - Оттащить с дороги";
-    const string PromptCells = "ЛКМ - Взять батарейки";
-    const string PromptInsert = "ЛКМ - Вставить шланг в бак";
-    const string PromptNeedHose = "Горловина бака: нужен шланг";
-    const string PromptTooFar = "Шланг не достаёт до канистры";
-    const string PromptFiller = "Подойди к горловине бака: сзади слева";
-    const string PromptEnter = "E - Сесть за руль";
-    const string PromptDriving = "E - Выйти, L - Фары, V - Дворники: ";
-    const string PromptHandbrake = ", Пробел - Ручник: ";
-    const string PromptOverturned = "Машина перевернулась! R - Поставить на колёса\n";
-
-    static readonly string[] WiperNames = { "выкл", "редко", "часто" };
+    public const string KeyGrab = "ЛКМ";
+    public const string KeyInteract = "E";
+    public const string KeyPush = "F";
+    public const string KeyWrench = "G";
+    public const string KeyRecover = "R";
+    const string DoorPartName = "Door";
+    const char KeySeparator = ' ';
 
     const int ReferenceHeight = 1080;
-    const float PromptOffset = 24f;
-    const float PromptSize = 24f;
-    const float DrivingPromptSize = 16f;
-    const float DrivingPromptMargin = 20f;
-
     const int DotTextureSize = 64;
-    const float DotIdleSize = 5f;
-    const float DotActiveSize = 22f;
-    const float DotIdleAlpha = 0.55f;
-    const float DotActiveAlpha = 0.3f;
-    const float DotResponse = 16f;
+    const float DotSize = 5f;
+    const float DotAlpha = 0.55f;
 
-    public string CurrentPrompt { get; private set; } = "";
-    public bool IsAimingAtInteractable { get; private set; }
-    public float DotPixelSize => dot.rectTransform.sizeDelta.x;
-    public float DotAlpha => dot.color.a;
+    const int CapTextureSize = 32;
+    const int CapCorner = 10;
+    const float CapHeight = 34f;
+    const float CapWidth = 36f;
+    const float CapWideWidth = 60f;
+    const float CapGap = 8f;
+    const int CapFontSize = 19;
+    static readonly Color CapColor = new Color(0.04f, 0.04f, 0.04f, 0.62f);
+    static readonly Color CapTextColor = new Color(0.94f, 0.92f, 0.84f);
+
+    // Один значок или два через пробел: "E" или "E G".
+    public string CurrentKey { get; private set; } = "";
     public bool DotVisible => dot.enabled;
 
     PlayerHands hands;
     PlayerSeat seat;
     PlayerWrench wrench;
-    GUIStyle promptStyle;
+    ObjectOutline outline;
     Image dot;
-    float dotOpenness;
+    readonly Image[] caps = new Image[2];
+    readonly Text[] capTexts = new Text[2];
+    string shownKey = "";
+
+    Transform outlined;
+    string outlinedPart;
 
     void Awake()
     {
         hands = GetComponentInParent<PlayerHands>();
         seat = GetComponentInParent<PlayerSeat>();
         wrench = GetComponentInParent<PlayerWrench>();
-        CreateDot();
+        outline = gameObject.AddComponent<ObjectOutline>();
+        CreateCanvas();
     }
 
-    void CreateDot()
+    void CreateCanvas()
     {
         var canvasObject = new GameObject("CrosshairCanvas");
         canvasObject.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
@@ -73,9 +63,44 @@ public class InteractionUI : MonoBehaviour
         dot = dotObject.AddComponent<Image>();
         dot.sprite = CreateCircleSprite();
         dot.raycastTarget = false;
-        dot.color = new Color(1f, 1f, 1f, DotIdleAlpha);
+        dot.color = new Color(1f, 1f, 1f, DotAlpha);
+        Center(dot.rectTransform);
 
-        RectTransform rect = dot.rectTransform;
+        Sprite capSprite = CreateCapSprite();
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        for (int i = 0; i < caps.Length; i++)
+        {
+            var capObject = new GameObject("KeyCap");
+            capObject.transform.SetParent(canvasObject.transform, false);
+            caps[i] = capObject.AddComponent<Image>();
+            caps[i].sprite = capSprite;
+            caps[i].type = Image.Type.Sliced;
+            caps[i].color = CapColor;
+            caps[i].raycastTarget = false;
+            Center(caps[i].rectTransform);
+
+            var textObject = new GameObject("KeyName");
+            textObject.transform.SetParent(capObject.transform, false);
+            capTexts[i] = textObject.AddComponent<Text>();
+            capTexts[i].font = font;
+            capTexts[i].fontStyle = FontStyle.Bold;
+            capTexts[i].color = CapTextColor;
+            capTexts[i].alignment = TextAnchor.MiddleCenter;
+            capTexts[i].horizontalOverflow = HorizontalWrapMode.Overflow;
+            capTexts[i].verticalOverflow = VerticalWrapMode.Overflow;
+            capTexts[i].raycastTarget = false;
+            RectTransform rect = capTexts[i].rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            capObject.SetActive(false);
+        }
+    }
+
+    static void Center(RectTransform rect)
+    {
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = Vector2.zero;
     }
@@ -96,61 +121,76 @@ public class InteractionUI : MonoBehaviour
         return Sprite.Create(texture, new Rect(0f, 0f, DotTextureSize, DotTextureSize), Vector2.one * 0.5f);
     }
 
+    // Скруглённая плашка: углы растягиваются отдельно от середины, поэтому широкая клавиша выглядит так же.
+    static Sprite CreateCapSprite()
+    {
+        var texture = new Texture2D(CapTextureSize, CapTextureSize, TextureFormat.RGBA32, false);
+        float half = (CapTextureSize - 1) * 0.5f;
+        float inner = half - CapCorner;
+        for (int y = 0; y < CapTextureSize; y++)
+        {
+            for (int x = 0; x < CapTextureSize; x++)
+            {
+                float dx = Mathf.Max(Mathf.Abs(x - half) - inner, 0f);
+                float dy = Mathf.Max(Mathf.Abs(y - half) - inner, 0f);
+                float edge = CapCorner - Mathf.Sqrt(dx * dx + dy * dy);
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(edge)));
+            }
+        }
+        texture.Apply();
+        return Sprite.Create(texture, new Rect(0f, 0f, CapTextureSize, CapTextureSize), Vector2.one * 0.5f, 100f, 0, SpriteMeshType.FullRect, Vector4.one * (CapCorner + 1));
+    }
+
     void Update()
     {
         if (GameFlow.State != GameState.Playing)
         {
+            CurrentKey = "";
+            outline.Show(null);
             dot.enabled = false;
-            CurrentPrompt = "";
+            DrawKeys();
             return;
         }
 
+        outlined = null;
+        outlinedPart = null;
         bool aimed = InteractionRay.Cast(transform, out RaycastHit hit);
-        CurrentPrompt = ResolvePrompt(aimed, hit);
+        CurrentKey = ResolveKey(aimed, hit);
+        outline.Show(outlined, outlinedPart);
 
-        IsAimingAtInteractable = !seat.IsSeated
-            && (seat.PushZone != null || (aimed && InteractionRay.IsInteractable(hit, hands.Held != null, hands.HeldSiphon)));
-        UpdateDot();
-    }
-
-    void UpdateDot()
-    {
         // За рулём точка не нужна: центр экрана остаётся свободным для дороги.
-        dot.enabled = !seat.IsSeated;
-
-        dotOpenness = Mathf.MoveTowards(dotOpenness, IsAimingAtInteractable ? 1f : 0f, DotResponse * 0.5f * Time.unscaledDeltaTime);
-        float eased = Mathf.SmoothStep(0f, 1f, dotOpenness);
-
-        float size = Mathf.Lerp(DotIdleSize, DotActiveSize, eased) * Screen.height / ReferenceHeight;
-        dot.rectTransform.sizeDelta = Vector2.one * size;
-        dot.color = new Color(1f, 1f, 1f, Mathf.Lerp(DotIdleAlpha, DotActiveAlpha, eased));
+        dot.enabled = !seat.IsSeated && CurrentKey.Length == 0;
+        dot.rectTransform.sizeDelta = Vector2.one * (DotSize * Screen.height / ReferenceHeight);
+        DrawKeys();
     }
 
-    string ResolvePrompt(bool aimed, RaycastHit hit)
+    string ResolveKey(bool aimed, RaycastHit hit)
     {
         string basic = ResolveBasic(aimed, hit);
-        if (string.IsNullOrEmpty(wrench.Prompt))
+        if (!wrench.HasJob)
             return basic;
-        return string.IsNullOrEmpty(basic) ? wrench.Prompt : basic + "\n" + wrench.Prompt;
+
+        if (wrench.JobTarget != null)
+            outlined = wrench.JobTarget;
+
+        // С деталью в руках дело одно: ключ. С пустыми руками у машины можно и сесть, и снять деталь.
+        return hands.Held != null || basic.Length == 0 ? KeyWrench : basic + KeySeparator + KeyWrench;
     }
 
     string ResolveBasic(bool aimed, RaycastHit hit)
     {
         if (seat.IsSeated)
         {
-            string driving = PromptDriving + WiperNames[seat.Vehicle.WiperMode] + PromptHandbrake + (seat.Vehicle.HandbrakeOn ? "вкл" : "выкл");
-            if (seat.Vehicle.FuelLiters <= 0f)
-                driving = PromptNoFuel + driving;
-            else if (!seat.Vehicle.EngineOn)
-                driving = PromptStart + driving;
-            return seat.Vehicle.IsOverturned ? PromptOverturned + driving : driving;
+            if (seat.AimingAtKey)
+            {
+                outlined = seat.Vehicle.IgnitionKey;
+                return KeyInteract;
+            }
+            return seat.Vehicle.IsOverturned ? KeyRecover : "";
         }
 
-        if (StoryUI.Instance.NoteOpen)
-            return PromptCloseNote;
-
-        // Варианты ответа уже на экране, а ЛКМ просто заканчивает разговор.
-        if (NpcTalk.Current != null)
+        // Записка закрывается тем же кликом, которым открылась, а варианты ответа уже на экране.
+        if (StoryUI.Instance.NoteOpen || NpcTalk.Current != null)
             return "";
 
         if (hands.HeldSiphon != null && hands.HeldSiphon.IsPumping)
@@ -160,95 +200,74 @@ public class InteractionUI : MonoBehaviour
         if (aimed && hands.Held != null && hands.Held.TryGetComponent(out FuelCan heldCan) && heldCan.Liters > 0f
             && InteractionRay.IsFreeVehicle(hit, out VehicleController car) && car.FuelLiters < car.TankSize)
         {
-            if (Vector3.Distance(transform.position, car.FillerPoint) > PlayerSeat.PourReach)
-                return PromptFiller;
-            return PromptPour + Mathf.RoundToInt(heldCan.Liters) + " л, в баке " + Mathf.RoundToInt(car.FuelLiters) + " л";
+            outlined = car.FillerCap;
+            return Vector3.Distance(transform.position, car.FillerPoint) > PlayerSeat.PourReach ? "" : KeyInteract;
         }
 
         // Луч из зоны толкания не может попасть в её триггер: начало луча внутри него.
-        // Поэтому подсказка опирается на сам факт нахождения в зоне, где F и работает.
+        // Поэтому значок опирается на сам факт нахождения в зоне, где F и работает.
         if (seat.PushZone != null)
-            return PromptPush;
+            return KeyPush;
 
-        if (aimed)
-        {
-            if (InteractionRay.IsFiller(hit, out _))
-            {
-                if (hands.HeldSiphon == null)
-                    return PromptNeedHose;
-                if (hands.HeldSiphon.Source == null)
-                    return PromptInsert;
-            }
-            if (hands.HeldSiphon != null && hit.collider.CompareTag(InteractionRay.JerrycanTag) && hands.HeldSiphon.Source != null
-                && hit.rigidbody.TryGetComponent(out FuelCan farCan) && !hands.HeldSiphon.CanReach(farCan))
-                return PromptTooFar;
-            if (hands.Held == null && InteractionRay.IsPickupable(hit))
-            {
-                if (hit.rigidbody.TryGetComponent(out NoteItem _))
-                    return PromptRead;
-                if (hit.rigidbody.TryGetComponent(out CellPack _))
-                    return PromptCells;
-                if (hit.rigidbody.TryGetComponent(out RoadBlock _))
-                    return PromptDrag;
-                if (hit.rigidbody.TryGetComponent(out CarPartItem aimedPart))
-                    return PromptTake + ": " + aimedPart.Info.Name + " (" + Mathf.RoundToInt(hit.rigidbody.mass) + " кг)";
-                return hit.rigidbody.TryGetComponent(out FuelCan aimedCan) ? PromptTake + CanLiters(aimedCan) : PromptTake;
-            }
-            if (hands.Held == null && InteractionRay.IsNpc(hit, out _))
-                return PromptTalk;
-            if (hands.Held == null && InteractionRay.IsDoor(hit, out HouseDoor door))
-                return door.IsOpen ? PromptDoorClose : PromptDoorOpen;
-            if (InteractionRay.IsFuelTransfer(hands.HeldSiphon, hit))
-                return PromptTransfer;
-            if (InteractionRay.IsFreeVehicle(hit, out _))
-                return PromptEnter;
-        }
-        if (hands.Held == null)
+        if (!aimed)
             return "";
-        return hands.Held.TryGetComponent(out FuelCan can) ? PromptHolding + CanLiters(can) : PromptHolding;
+
+        if (InteractionRay.IsFiller(hit, out _) && hands.HeldSiphon != null && hands.HeldSiphon.Source == null)
+        {
+            outlined = hit.collider.transform;
+            return KeyGrab;
+        }
+        if (hands.Held == null && (InteractionRay.IsPickupable(hit) || InteractionRay.IsNpc(hit, out _) || InteractionRay.IsDoor(hit, out _)))
+        {
+            outlined = hit.rigidbody.transform;
+            return KeyGrab;
+        }
+        if (InteractionRay.IsFuelTransfer(hands.HeldSiphon, hit))
+        {
+            outlined = hit.rigidbody.transform;
+            return KeyGrab;
+        }
+        if (InteractionRay.IsFreeVehicle(hit, out VehicleController free))
+        {
+            outlined = free.transform;
+            outlinedPart = DoorPartName;
+            return KeyInteract;
+        }
+        return "";
     }
 
-    static string CanLiters(FuelCan can)
+    void DrawKeys()
     {
-        return " (канистра: " + Mathf.RoundToInt(can.Liters) + " л)";
-    }
-
-    void OnGUI()
-    {
-        if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(CurrentPrompt))
+        if (CurrentKey == shownKey && Time.frameCount % 30 != 0)
             return;
+        shownKey = CurrentKey;
 
+        string[] keys = CurrentKey.Length == 0 ? System.Array.Empty<string>() : CurrentKey.Split(KeySeparator);
         float scale = Screen.height / (float)ReferenceHeight;
-        Vector2 center = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
 
-        if (promptStyle == null)
-            promptStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
+        float total = -CapGap;
+        foreach (string key in keys)
+            total += WidthOf(key) + CapGap;
 
-        // За рулём подсказка видна постоянно, поэтому она уходит в угол и не мешает смотреть на дорогу.
-        Rect area;
-        if (seat.IsSeated)
+        float left = -total * 0.5f;
+        for (int i = 0; i < caps.Length; i++)
         {
-            float margin = DrivingPromptMargin * scale;
-            float height = DrivingPromptSize * 4f * scale;
-            promptStyle.alignment = TextAnchor.LowerLeft;
-            promptStyle.fontSize = Mathf.RoundToInt(DrivingPromptSize * scale);
-            area = new Rect(margin, Screen.height - height - margin, Screen.width - margin * 2f, height);
-        }
-        else
-        {
-            promptStyle.alignment = TextAnchor.UpperCenter;
-            promptStyle.fontSize = Mathf.RoundToInt(PromptSize * scale);
-            // Записка закрывает центр экрана, поэтому подсказка на это время уходит под неё.
-            float top = StoryUI.Instance.NoteOpen ? Screen.height * 0.91f : center.y + PromptOffset * scale;
-            area = new Rect(0f, top, Screen.width, PromptSize * 2.5f * scale);
-        }
+            bool used = i < keys.Length;
+            caps[i].gameObject.SetActive(used);
+            if (!used)
+                continue;
 
-        Rect shadow = area;
-        shadow.position += Vector2.one * Mathf.Max(1f, 2f * scale);
+            float width = WidthOf(keys[i]);
+            caps[i].rectTransform.sizeDelta = new Vector2(width, CapHeight) * scale;
+            caps[i].rectTransform.anchoredPosition = new Vector2((left + width * 0.5f) * scale, 0f);
+            capTexts[i].text = keys[i];
+            capTexts[i].fontSize = Mathf.RoundToInt(CapFontSize * scale);
+            left += width + CapGap;
+        }
+    }
 
-        GUI.color = Color.black;
-        GUI.Label(shadow, CurrentPrompt, promptStyle);
-        GUI.color = Color.white;
-        GUI.Label(area, CurrentPrompt, promptStyle);
+    static float WidthOf(string key)
+    {
+        return key.Length > 1 ? CapWideWidth : CapWidth;
     }
 }

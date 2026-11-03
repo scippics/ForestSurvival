@@ -143,7 +143,6 @@ public class PlayerHands : MonoBehaviour
                 WorldSync.Instance.AnnounceRecipe(blueprint.name, blueprint.recipeID);
             Destroy(blueprint.gameObject);
             ForestAudio.Play(ForestSound.Paper, 0.7f);
-            StoryUI.Instance.Say("Чертёж в блокноте. Tab - открыть.");
             return;
         }
 

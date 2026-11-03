@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // Шланг. Вставляется в бак брошенной машины, потом конец наводится на канистру: подсос идёт, пока зажата
-// кнопка, а бензин пойдёт, только если отпустить в зелёной зоне шкалы. Дальше он льётся сам, пока канистра не полна.
+// кнопка, а бензин пойдёт, только если отпустить на зелёном секторе манометра. Дальше он льётся сам, пока канистра не полна.
 public class FuelSiphon : MonoBehaviour
 {
     public const float SuccessMin = 70f;
@@ -12,9 +12,12 @@ public class FuelSiphon : MonoBehaviour
     const float TearDistance = 6.5f;
     const float FlowPerSecond = 1.7f;
     const float CanMovedDistance = 0.6f;
-    const float BarDistance = 9f;
-
-    public const string BarSuck = "Подсос: отпусти в зелёной зоне";
+    const float GaugeSize = 0.13f;
+    const float GaugeArc = 270f;
+    const float GaugeOffset = 0.2f;
+    const float PumpTickPeriod = 0.28f;
+    static readonly Color GaugeGreen = new Color(0.2f, 1f, 0.3f);
+    static readonly Color GaugeNeedle = new Color(1f, 0.28f, 0.08f);
 
     public float SiphonPressure { get; private set; }
     public bool IsPumping { get; private set; }
@@ -25,10 +28,53 @@ public class FuelSiphon : MonoBehaviour
     HoseRope rope;
     Vector3 canStart;
     float nextSend;
+    float nextTick;
+    Transform gauge;
+    Transform gaugeNeedle;
 
     void Awake()
     {
         rope = new GameObject("HoseRope").AddComponent<HoseRope>();
+        BuildGauge();
+    }
+
+    // Латунный манометр на шланге: стрелка показывает подсос, зелёный сектор показывает, когда отпускать.
+    void BuildGauge()
+    {
+        gauge = new GameObject("PumpGauge").transform;
+        gauge.SetParent(transform, false);
+        gauge.localPosition = Vector3.up * GaugeOffset;
+
+        Texture2D face = ForestTextures.Dial(100, 20, "ПОДСОС");
+        GameObject dial = ProceduralModels.Part(gauge, "GaugeFace", PrimitiveType.Quad, Vector3.zero, Vector3.one * GaugeSize, ProceduralModels.CreateLit(new Color(0.1f, 0.1f, 0.09f)));
+        Material material = dial.GetComponent<Renderer>().sharedMaterial;
+        material.mainTexture = face;
+        material.SetTexture("_EmissionMap", face);
+        material.SetColor("_EmissionColor", Color.white * 0.75f);
+
+        Material bezel = ProceduralModels.Lit(new Color(0.6f, 0.47f, 0.2f), 0f, 0f, 0.5f);
+        ProceduralModels.Part(gauge, "GaugeBody", PrimitiveType.Cylinder, Vector3.forward * 0.012f, new Vector3(GaugeSize * 1.14f, 0.01f, GaugeSize * 1.14f), bezel, Quaternion.Euler(90f, 0f, 0f));
+
+        Material green = ProceduralModels.CreateLit(Color.black);
+        green.SetColor("_EmissionColor", GaugeGreen);
+        for (float t = SuccessMin; t <= SuccessMax; t += 2.5f)
+        {
+            Quaternion turn = NeedleTurn(t / MaxPressure);
+            ProceduralModels.Part(gauge, "GaugeZone", PrimitiveType.Cube, turn * Vector3.up * (GaugeSize * 0.42f) + Vector3.back * 0.001f, new Vector3(GaugeSize * 0.05f, GaugeSize * 0.09f, 0.001f), green, turn);
+        }
+
+        gaugeNeedle = new GameObject("GaugeNeedle").transform;
+        gaugeNeedle.SetParent(gauge, false);
+        gaugeNeedle.localPosition = Vector3.back * 0.003f;
+        Material needle = ProceduralModels.CreateLit(Color.black);
+        needle.SetColor("_EmissionColor", GaugeNeedle);
+        ProceduralModels.Part(gaugeNeedle, "NeedleBlade", PrimitiveType.Cube, Vector3.up * (GaugeSize * 0.2f), new Vector3(GaugeSize * 0.03f, GaugeSize * 0.42f, 0.001f), needle);
+        gaugeNeedle.localRotation = NeedleTurn(0f);
+    }
+
+    static Quaternion NeedleTurn(float fraction)
+    {
+        return Quaternion.Euler(0f, 0f, GaugeArc * 0.5f - GaugeArc * Mathf.Clamp01(fraction));
     }
 
     void OnDestroy()
@@ -48,13 +94,9 @@ public class FuelSiphon : MonoBehaviour
         car.OpenCap();
         ForestAudio.Play(ForestSound.Click, 0.4f);
         if (car.Liters < 0.1f)
-        {
-            StoryUI.Instance.Say("Сухо. В этом баке давно ничего нет.");
             return false;
-        }
 
         Source = car;
-        StoryUI.Instance.Say(car.Spec.Name + ": в баке плещется, литров " + Mathf.RoundToInt(car.Liters) + ". Теперь конец шланга к канистре.");
         return true;
     }
 
@@ -82,10 +124,13 @@ public class FuelSiphon : MonoBehaviour
         if (buttonHeld)
         {
             SiphonPressure = Mathf.Min(SiphonPressure + PressureRate * deltaTime, MaxPressure);
-            StoryUI.Instance.ShowBar(BarSuck, SiphonPressure / MaxPressure, SuccessMin / MaxPressure, SuccessMax / MaxPressure);
+            if (Time.time > nextTick)
+            {
+                nextTick = Time.time + PumpTickPeriod * Mathf.Lerp(1f, 0.4f, SiphonPressure / MaxPressure);
+                ForestAudio.Play(ForestSound.Ratchet, 0.12f);
+            }
             if (SiphonPressure >= MaxPressure)
             {
-                StoryUI.Instance.Say("Подавился бензином!");
                 ForestAudio.Play(ForestSound.Cough, 0.8f);
                 CancelPump();
             }
@@ -95,7 +140,7 @@ public class FuelSiphon : MonoBehaviour
         if (SiphonPressure >= SuccessMin && SiphonPressure <= SuccessMax)
             StartFlow(can);
         else
-            StoryUI.Instance.Say("Не пошло: слишком рано отпустил.");
+            ForestAudio.Play(ForestSound.Click, 0.25f);
         CancelPump();
     }
 
@@ -107,7 +152,6 @@ public class FuelSiphon : MonoBehaviour
         can.SetOpen(true);
         ForestAudio.SetFlowing(true);
         StoryDirector.Instance.OnFuelInHands();
-        StoryUI.Instance.Say("Пошло. Держи канистру на месте.");
     }
 
     void StopFlow()
@@ -136,7 +180,7 @@ public class FuelSiphon : MonoBehaviour
         // Шланг не резиновый: отошёл слишком далеко, и он выскочил из горловины.
         if (Vector3.Distance(transform.position, Source.FillerPoint) > TearDistance)
         {
-            StoryUI.Instance.Say("Шланг выскочил из бака.");
+            ForestAudio.Play(ForestSound.Click, 0.5f);
             Detach();
             return;
         }
@@ -146,7 +190,6 @@ public class FuelSiphon : MonoBehaviour
 
         if (Target == null || (Target.transform.position - canStart).sqrMagnitude > CanMovedDistance * CanMovedDistance)
         {
-            StoryUI.Instance.Say("Канистру сдвинули, бензин перестал идти.");
             StopFlow();
             return;
         }
@@ -154,10 +197,6 @@ public class FuelSiphon : MonoBehaviour
         float room = FuelCan.Capacity - Target.Liters;
         float taken = Source.Drain(Mathf.Min(FlowPerSecond * Time.fixedDeltaTime, room));
         Target.SetLiters(Target.Liters + taken);
-
-        Camera view = Camera.main;
-        if (view != null && Vector3.Distance(view.transform.position, Target.transform.position) < BarDistance)
-            StoryUI.Instance.ShowBar("Канистра " + Mathf.RoundToInt(Target.Liters) + "/" + FuelCan.Capacity + " л, в баке " + Mathf.RoundToInt(Source.Liters) + " л", Target.Liters / FuelCan.Capacity);
 
         if (Time.time > nextSend && WorldSync.Instance != null)
         {
@@ -167,7 +206,6 @@ public class FuelSiphon : MonoBehaviour
 
         if (Target.IsFull)
         {
-            StoryUI.Instance.Say("Канистра полная.");
             ForestAudio.Play(ForestSound.Click, 0.3f);
             AbandonedCar finished = Source;
             Detach();
@@ -175,13 +213,19 @@ public class FuelSiphon : MonoBehaviour
         }
         else if (Source.Liters <= 0.01f)
         {
-            StoryUI.Instance.Say("Бак высох. В шланге только воздух.");
+            ForestAudio.Play(ForestSound.Cough, 0.3f);
             Detach();
         }
     }
 
     void LateUpdate()
     {
+        // Манометр всегда смотрит на того, кто держит шланг, и лежит стрелкой на нуле, пока не качают.
+        Camera view = Camera.main;
+        if (view != null)
+            gauge.rotation = Quaternion.LookRotation(gauge.position - view.transform.position, view.transform.up);
+        gaugeNeedle.localRotation = NeedleTurn(SiphonPressure / MaxPressure);
+
         if (Source == null)
         {
             rope.Hide();

@@ -19,6 +19,11 @@ public class VehicleDashboard : MonoBehaviour
     const float HandbrakeRaised = -32f;
     const float HandbrakeLowered = -6f;
     const float HandbrakeResponse = 11f;
+    const float KeyOnAngle = 40f;
+    const float KeyCrankAngle = 75f;
+    const float KeyResponse = 18f;
+    const float LowBattery = 0.25f;
+    const float WornEngine = 0.4f;
 
     public const float FuelBarBottom = 0.248f;
     public const float FuelBarHeight = 0.086f;
@@ -58,6 +63,10 @@ public class VehicleDashboard : MonoBehaviour
     public Material HandbrakeLamp;
     public Material HeadlightLamp;
     public Material FuelLamp;
+    public Material BatteryLamp;
+    public Material EngineLamp;
+    public Color BatteryOnColor;
+    public Color EngineOnColor;
     public Color HandbrakeOnColor;
     public Color HeadlightOnColor;
     public Color FuelOnColor;
@@ -87,6 +96,7 @@ public class VehicleDashboard : MonoBehaviour
     float freshenerAngle;
     float freshenerSpeed;
     float shownFuel;
+    float keyAngle;
     float wiperPhase;
     float wiperPause;
     float wiperAngle = VehicleExterior.WiperRestAngle;
@@ -192,6 +202,11 @@ public class VehicleDashboard : MonoBehaviour
         HandbrakeLamp.SetColor("_EmissionColor", controller.HandbrakeOn ? HandbrakeOnColor : Color.black);
         HeadlightLamp.SetColor("_EmissionColor", controller.LightsOn ? HeadlightOnColor : Color.black);
         FuelLamp.SetColor("_EmissionColor", controller.IsLowFuel ? FuelOnColor : Color.black);
+
+        // Лампа заряда горит, пока мотор не крутит генератор, и когда аккумулятор почти пуст.
+        bool charging = controller.EngineRunning && controller.Battery >= LowBattery;
+        BatteryLamp.SetColor("_EmissionColor", controller.IsOccupied && !charging ? BatteryOnColor : Color.black);
+        EngineLamp.SetColor("_EmissionColor", controller.IsOccupied && controller.Condition < WornEngine ? EngineOnColor : Color.black);
     }
 
     void UpdateControls(float dt)
@@ -202,6 +217,11 @@ public class VehicleDashboard : MonoBehaviour
         float lever = controller.HandbrakeOn ? HandbrakeRaised : HandbrakeLowered;
         HandbrakeLeverAngle = Mathf.Lerp(HandbrakeLeverAngle, lever, 1f - Mathf.Exp(-HandbrakeResponse * dt));
         HandbrakeLever.localRotation = Quaternion.Euler(HandbrakeLeverAngle, 0f, 0f);
+
+        // Ключ поворачивают вправо, по часовой стрелке от водителя.
+        float wanted = controller.IsCranking ? KeyCrankAngle : controller.EngineOn ? KeyOnAngle : 0f;
+        keyAngle = Mathf.Lerp(keyAngle, wanted, 1f - Mathf.Exp(-KeyResponse * dt));
+        controller.IgnitionKey.localRotation = Quaternion.Euler(0f, 0f, -keyAngle);
     }
 
     // Маятник от настоящего ускорения кузова: разгон отбрасывает ёлочку назад, поворот вбок.

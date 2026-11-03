@@ -6,14 +6,11 @@ public class TorchCharge : MonoBehaviour
     const float SecondsOnFull = 540f;
     const float LowCharge = 0.18f;
     const float RefillAmount = 0.65f;
-    const float BarSeconds = 1.6f;
 
     public float Charge { get; private set; } = 1f;
 
     PlayerCamera view;
     float baseIntensity;
-    float barUntil;
-    bool warned;
 
     void Start()
     {
@@ -31,29 +28,19 @@ public class TorchCharge : MonoBehaviour
     {
         Light torch = view.Flashlight;
         ForestAudio.Play(ForestSound.Click, 0.35f);
-        barUntil = Time.time + BarSeconds;
         if (!torch.enabled && Charge <= 0f)
-        {
-            StoryUI.Instance.Say("Фонарик не горит: батарейки сели.");
             return;
-        }
         torch.enabled = !torch.enabled;
     }
 
     public void Refill()
     {
         Charge = Mathf.Min(1f, Charge + RefillAmount);
-        warned = false;
-        barUntil = Time.time + BarSeconds;
-        StoryUI.Instance.Say("Свежие батарейки в фонарике.");
     }
 
     void Update()
     {
         Light torch = view.Flashlight;
-        if (Time.time < barUntil)
-            StoryUI.Instance.ShowBar("Фонарик " + Mathf.RoundToInt(Charge * 100f) + "%", Charge);
-
         if (!torch.enabled)
             return;
 
@@ -63,7 +50,7 @@ public class TorchCharge : MonoBehaviour
         if (Charge <= 0f)
         {
             torch.enabled = false;
-            StoryUI.Instance.Say("Фонарик погас.");
+            ForestAudio.Play(ForestSound.Click, 0.2f);
             return;
         }
 
@@ -73,11 +60,6 @@ public class TorchCharge : MonoBehaviour
             float low = Charge / LowCharge;
             float dip = Mathf.PerlinNoise(Time.time * 9f, 2.3f);
             level = Mathf.Lerp(0.2f, 1f, low) * (dip < 0.28f ? 0.25f : 1f);
-            if (!warned)
-            {
-                warned = true;
-                StoryUI.Instance.Say("Фонарик садится.");
-            }
         }
         torch.intensity = baseIntensity * level;
     }

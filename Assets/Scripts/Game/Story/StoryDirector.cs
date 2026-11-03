@@ -303,7 +303,6 @@ public class StoryDirector : MonoBehaviour
         if (Stage < StoryStage.DriveNorth && car.FuelLiters > 0.1f)
         {
             Advance(StoryStage.DriveNorth);
-            ui.Say(StoryText.StartHint);
         }
 
         if (Stage == StoryStage.DriveNorth)
