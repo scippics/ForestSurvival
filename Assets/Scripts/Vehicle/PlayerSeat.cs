@@ -369,6 +369,8 @@ public class PlayerSeat : MonoBehaviour
         body.isKinematic = false;
         body.interpolation = RigidbodyInterpolation.Interpolate;
         body.position = exit;
+        // Иначе тело сохраняет курс машины, и взгляд расходится с направлением шага.
+        body.rotation = Quaternion.identity;
         body.linearVelocity = vehicleBody.linearVelocity;
 
         movement.enabled = true;
