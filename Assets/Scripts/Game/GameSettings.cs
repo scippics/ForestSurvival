@@ -12,6 +12,7 @@ public static class GameSettings
     const string QualityKey = "quality";
     const string FrameLimitKey = "frameLimit";
     const int DefaultFrameLimit = 1;
+    const int MaxRefreshesPerFrame = 4;
     const float DefaultSensitivity = 0.1f;
     const float DefaultVolume = 0.85f;
     const int HighQuality = 2;
@@ -77,11 +78,15 @@ public static class GameSettings
         ApplyFrameLimit(FrameLimit);
     }
 
-    // Без предела видеокарта рисует лишние сотни кадров в секунду и греется впустую.
+    // Кадр всегда ждёт обновления экрана: иначе картинка рвётся горизонтальной линией, а движение дёргается.
+    // Предел задаётся через целое число обновлений на кадр, поэтому темп остаётся ровным на любом экране.
     static void ApplyFrameLimit(int index)
     {
-        QualitySettings.vSyncCount = 0;
-        Application.targetFrameRate = FrameLimits[Mathf.Clamp(index, 0, FrameLimits.Length - 1)];
+        int limit = FrameLimits[Mathf.Clamp(index, 0, FrameLimits.Length - 1)];
+        double refresh = Screen.currentResolution.refreshRateRatio.value;
+        int perFrame = limit > 0 && refresh > 1.0 ? Mathf.Clamp(Mathf.RoundToInt((float)(refresh / limit)), 1, MaxRefreshesPerFrame) : 1;
+        QualitySettings.vSyncCount = perFrame;
+        Application.targetFrameRate = -1;
     }
 
     static void ApplyQuality(int level)
