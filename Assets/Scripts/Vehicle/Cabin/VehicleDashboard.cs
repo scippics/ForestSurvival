@@ -31,7 +31,6 @@ public class VehicleDashboard : MonoBehaviour
     const float DialDayGlow = 0.75f;
     const float DialNightGlow = 1.15f;
     const float RadioGlowOn = 0.8f;
-    static readonly Color RadioOnAirGlow = new Color(0.2f, 1.6f, 0.45f);
 
     const float FreshenerGravity = 14f;
     const float FreshenerDamping = 1.6f;
@@ -198,10 +197,7 @@ public class VehicleDashboard : MonoBehaviour
         SpeedDial.SetColor("_EmissionColor", dial);
         RpmDial.SetColor("_EmissionColor", dial);
         FuelBarMaterial.SetColor("_EmissionColor", controller.IsLowFuel ? FuelOnColor * glow : dial);
-
-        // В эфире экран магнитолы горит зелёным даже при заглушенном моторе: это единственный знак, что идёт трансляция.
-        Color radio = controller.EngineRunning || controller.LightsOn ? RadioGlow * RadioGlowOn : Color.black;
-        RadioDisplay.SetColor("_EmissionColor", controller.RadioOnAir ? RadioOnAirGlow : radio);
+        RadioDisplay.SetColor("_EmissionColor", controller.EngineRunning || controller.LightsOn ? RadioGlow * RadioGlowOn : Color.black);
 
         HandbrakeLamp.SetColor("_EmissionColor", controller.HandbrakeOn ? HandbrakeOnColor : Color.black);
         HeadlightLamp.SetColor("_EmissionColor", controller.LightsOn ? HeadlightOnColor : Color.black);

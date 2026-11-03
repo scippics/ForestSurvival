@@ -300,12 +300,6 @@ public class InteractionUI : MonoBehaviour
                 action = seat.Vehicle.EngineOn ? "Заглушить" : "Держать: завести";
                 return KeyInteract;
             }
-            if (seat.AimingAtRadio)
-            {
-                outlined = seat.Vehicle.RadioFace;
-                action = "Держать: эфир";
-                return KeyInteract;
-            }
             if (!seat.Vehicle.IsOverturned)
                 return "";
             action = "Поставить на колёса";

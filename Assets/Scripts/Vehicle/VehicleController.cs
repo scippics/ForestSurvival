@@ -74,8 +74,6 @@ public class VehicleController : MonoBehaviour
     public readonly List<Transform> Seats = new List<Transform>();
     public Transform IgnitionKey { get; set; }
     public bool IsCranking { get; set; }
-    public Transform RadioFace { get; set; }
-    public bool RadioOnAir { get; set; }
     public Transform FillerCap => fillerCap;
     public float ForwardSpeed => Vector3.Dot(body.linearVelocity, transform.forward);
     public float SteerAngle => currentSteer;

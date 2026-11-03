@@ -11,7 +11,6 @@ public static class GameSettings
     const string VolumeKey = "volume";
     const string QualityKey = "quality";
     const string FrameLimitKey = "frameLimit";
-    const string ExternalAudioKey = "allowExternalAudio";
     const int DefaultFrameLimit = 1;
     const int MaxRefreshesPerFrame = 4;
     const float DefaultSensitivity = 0.1f;
@@ -60,13 +59,6 @@ public static class GameSettings
             PlayerPrefs.SetInt(QualityKey, value);
             ApplyQuality(value);
         }
-    }
-
-    // Согласие на трансляцию звука компьютера через магнитолу. По умолчанию выключено: это личные данные игрока.
-    public static bool AllowExternalAudioStreaming
-    {
-        get => PlayerPrefs.GetInt(ExternalAudioKey, 0) == 1;
-        set => PlayerPrefs.SetInt(ExternalAudioKey, value ? 1 : 0);
     }
 
     public static int FrameLimit

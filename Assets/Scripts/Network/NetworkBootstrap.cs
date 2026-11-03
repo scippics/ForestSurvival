@@ -61,7 +61,6 @@ public static class NetworkBootstrap
         UnityEngine.Object.DontDestroyOnLoad(WorldPrefab);
         SetPrefabHash(WorldPrefab.AddComponent<NetworkObject>(), WorldPrefabHash);
         WorldPrefab.AddComponent<WorldSync>();
-        WorldPrefab.AddComponent<RadioStreamNetworker>();
 
         var managerObject = new GameObject("NetworkManager");
         var manager = managerObject.AddComponent<NetworkManager>();

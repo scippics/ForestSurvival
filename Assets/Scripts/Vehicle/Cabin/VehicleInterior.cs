@@ -46,7 +46,6 @@ public static class VehicleInterior
         BuildMirror(vehicle, dash);
 
         controller.IgnitionKey = BuildIgnition(vehicle);
-        controller.RadioFace = vehicle.Find("RadioFace");
         controller.DriverSeat = BuildSeat(vehicle, "DriverSeatPos", -0.42f);
         controller.PassengerSeat = BuildSeat(vehicle, "PassengerSeatPos", 0.42f);
         controller.Seats.Add(controller.DriverSeat);
