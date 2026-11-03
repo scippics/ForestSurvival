@@ -24,6 +24,7 @@ public static class RuntimeBootstrapper
     static readonly Color TailEmission = new Color(1f, 0.08f, 0.05f);
 
     static Mesh tyreMesh;
+    public static Mesh TyreMesh => tyreMesh != null ? tyreMesh : tyreMesh = ForestMeshes.BuildTyre();
     static Material glassMaterial;
 
     // Общий материал растительности: один на весь лес, чтобы деревья рисовались инстансингом.
@@ -114,6 +115,7 @@ public static class RuntimeBootstrapper
         zone.center = new Vector3(0f, 0f, -2.7f);
         zone.size = new Vector3(2f, 2.4f, 1.6f);
 
+        vehicle.AddComponent<CarUpgrades>();
         vehicle.AddComponent<PushableVehicle>();
         vehicle.AddComponent<WheelMudSpray>();
         var impact = vehicle.AddComponent<ImpactSound>();
@@ -137,6 +139,16 @@ public static class RuntimeBootstrapper
         var cabinCollider = cabin.AddComponent<BoxCollider>();
         cabinCollider.center = new Vector3(0f, 0.5f, -0.1f);
         cabinCollider.size = new Vector3(1.8f, 0.8f, 2.2f);
+
+        // Капот и багажник тоже твёрдые: иначе взгляд на горловину бака проходит над кузовом мимо.
+        foreach (float z in new[] { 1.5f, -1.6f })
+        {
+            var end = new GameObject("EndCollider");
+            end.transform.SetParent(vehicle, false);
+            var endCollider = end.AddComponent<BoxCollider>();
+            endCollider.center = new Vector3(0f, 0.04f, z);
+            endCollider.size = new Vector3(1.7f, 0.44f, 0.95f);
+        }
 
         // Ходовая и нижняя часть кабины.
         AddVisual(vehicle, "Chassis", PrimitiveType.Cube, new Vector3(0f, -0.4f, 0f), new Vector3(1.5f, 0.2f, 3.9f), Quaternion.identity, CarDarkColor);
@@ -361,6 +373,7 @@ public static class RuntimeBootstrapper
         player.AddComponent<BlueprintNotebook>();
         player.AddComponent<PlayerHands>();
         player.AddComponent<PlayerSeat>();
+        player.AddComponent<PlayerWrench>();
         cameraObject.AddComponent<InteractionUI>();
         cameraObject.AddComponent<FirstPersonArms>();
     }

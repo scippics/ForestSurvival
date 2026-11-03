@@ -21,7 +21,10 @@ public class PlayerSeat : MonoBehaviour
     const float RoadShakePerSpeed = 0.00035f;
     const float RoadShakeFrequency = 17f;
     const float PourLitersPerSecond = 4f;
+    public const float PourReach = 2.8f;
 
+    FuelCan pouringCan;
+    VehicleController pouringInto;
     Vector3 lastVehicleVelocity;
     Vector3 sway;
 
@@ -114,14 +117,38 @@ public class PlayerSeat : MonoBehaviour
         VehicleController target = null;
         bool canPour = !IsSeated && hands.Held != null && hands.Held.TryGetComponent(out can) && can.Liters > 0f
             && InteractionRay.Cast(view.transform, out RaycastHit hit) && InteractionRay.IsFreeVehicle(hit, out target)
-            && target.FuelLiters < VehicleController.TankCapacity;
+            && target.FuelLiters < target.TankSize;
 
-        IsPouring = canPour && Input.InteractHeld;
+        IsPouring = canPour && Input.InteractHeld && Vector3.Distance(transform.position, target.FillerPoint) <= PourReach;
+        hands.PourTilt = IsPouring;
         if (IsPouring)
         {
             float poured = target.AddFuel(Mathf.Min(PourLitersPerSecond * Time.fixedDeltaTime, can.Liters));
             can.SetLiters(can.Liters - poured);
+            FuelFx.ShowStream(can.SpoutPoint, target.FillerPoint);
+            StoryUI.Instance.ShowBar("Бак " + Mathf.RoundToInt(target.FuelLiters) + "/" + Mathf.RoundToInt(target.TankSize) + " л, в канистре " + Mathf.RoundToInt(can.Liters) + " л", target.FuelLiters / target.TankSize);
         }
+
+        // Крышки открыты только пока льётся: и у канистры, и у машины.
+        FuelCan openCan = IsPouring ? can : null;
+        VehicleController openCar = IsPouring ? target : null;
+        if (pouringCan != openCan)
+        {
+            if (pouringCan != null)
+                pouringCan.SetOpen(false);
+            if (openCan != null)
+                openCan.SetOpen(true);
+            pouringCan = openCan;
+        }
+        if (pouringInto != openCar)
+        {
+            if (pouringInto != null)
+                pouringInto.FillerOpen = false;
+            if (openCar != null)
+                openCar.FillerOpen = true;
+            pouringInto = openCar;
+        }
+
         ForestAudio.SetPouring(IsPouring);
         return canPour;
     }

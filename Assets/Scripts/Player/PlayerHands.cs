@@ -13,9 +13,11 @@ public class PlayerHands : MonoBehaviour
     const float MaxAngularSpeed = 10f;
     const float BreakDistance = 2f;
     const float ThrowImpulse = 12f;
+    const float PourAngle = 72f;
 
     public FuelSiphon HeldSiphon { get; private set; }
     public Rigidbody Held { get; private set; }
+    public bool PourTilt { get; set; }
 
     PlayerInputReader input;
     BlueprintNotebook notebook;
@@ -91,6 +93,10 @@ public class PlayerHands : MonoBehaviour
             else if (aimed && InteractionRay.IsNpc(hit, out NpcTalk npc))
                 npc.Open(input, transform);
         }
+        else if (aimed && HeldSiphon != null && HeldSiphon.Source == null && InteractionRay.IsFiller(hit, out AbandonedCar wreck))
+        {
+            HeldSiphon.Insert(wreck);
+        }
         else if (aimed && InteractionRay.IsFuelTransfer(HeldSiphon, hit))
         {
             HeldSiphon.BeginPump();
@@ -111,6 +117,10 @@ public class PlayerHands : MonoBehaviour
             HeldSiphon.TickPump(input.GrabHeld, Time.fixedDeltaTime, hit.rigidbody.GetComponent<FuelCan>());
         else
             HeldSiphon.CancelPump();
+
+        // Бензин пошёл: шланг опускается в канистру, а руки свободны.
+        if (HeldSiphon != null && HeldSiphon.IsFlowing)
+            Release();
     }
 
     void Grab(Rigidbody target)
@@ -194,6 +204,7 @@ public class PlayerHands : MonoBehaviour
 
         Held = null;
         HeldSiphon = null;
+        PourTilt = false;
     }
 
     void DriveHeld()
@@ -203,7 +214,15 @@ public class PlayerHands : MonoBehaviour
         Vector3 force = Held.mass * ((desired - Held.linearVelocity) * VelocityResponse - Physics.gravity);
         Held.AddForce(Vector3.ClampMagnitude(force, MaxLiftForce), ForceMode.Force);
 
-        Quaternion delta = holdPosition.rotation * heldRotationOffset * Quaternion.Inverse(Held.rotation);
+        // Когда льём, канистра наклоняется горловиной вперёд и вниз, как бы её ни подняли.
+        Quaternion wanted = holdPosition.rotation * heldRotationOffset;
+        if (PourTilt)
+        {
+            Vector3 flat = Vector3.ProjectOnPlane(view.forward, Vector3.up);
+            wanted = Quaternion.LookRotation(flat.sqrMagnitude > 0.01f ? flat : Vector3.forward, Vector3.up) * Quaternion.Euler(0f, 0f, -PourAngle);
+        }
+
+        Quaternion delta = wanted * Quaternion.Inverse(Held.rotation);
         delta.ToAngleAxis(out float angle, out Vector3 axis);
         if (angle > 180f)
             angle -= 360f;

@@ -30,9 +30,14 @@ public class VehicleController : MonoBehaviour
     const float MudResistancePerSpeed = 200f;
     const float StiffnessEpsilon = 0.01f;
 
-    public const float TankCapacity = 45f;
+    public const float BaseTank = 45f;
     const float IdleBurn = 0.008f;
     const float ThrottleBurn = 0.03f;
+
+    // В глубокой грязи мотор тянет на тех же оборотах вдвое тяжелее.
+    const float MudBurn = 1f;
+    const float FillerSwing = 110f;
+    const float FillerResponse = 9f;
     const float LowFuelFraction = 0.15f;
 
     public const int WipersOff = 0;
@@ -55,8 +60,11 @@ public class VehicleController : MonoBehaviour
     public float SteerAngle => currentSteer;
     public float Throttle => throttle;
     public bool EngineRunning => IsOccupied && FuelLiters > 0f;
-    public float FuelLiters { get; private set; } = TankCapacity;
-    public float FuelFraction => FuelLiters / TankCapacity;
+    public float FuelLiters { get; private set; } = BaseTank;
+    public float TankSize => BaseTank + tankBonus;
+    public float FuelFraction => FuelLiters / TankSize;
+    public bool FillerOpen { get; set; }
+    public Vector3 FillerPoint => fillerCap != null ? transform.TransformPoint(fillerRest) : transform.position;
     public bool IsLowFuel => FuelFraction < LowFuelFraction;
     public IReadOnlyList<Wheel> Wheels => wheels;
 
@@ -83,14 +91,40 @@ public class VehicleController : MonoBehaviour
     float steer;
     float currentSteer;
     bool releasedForPush;
+    float torqueFactor = 1f;
+    float speedFactor = 1f;
+    float mudGrip;
+    float tankBonus;
+    float burnFactor = 1f;
+    Transform fillerCap;
+    Vector3 fillerRest;
+    Quaternion fillerRestRotation;
+    float fillerAngle;
 
     void Awake()
     {
         body = GetComponent<Rigidbody>();
     }
 
+    public void ApplyUpgrades(float torque, float speed, float grip, float tank, float burn)
+    {
+        torqueFactor = torque;
+        speedFactor = speed;
+        mudGrip = Mathf.Clamp01(grip);
+        tankBonus = tank;
+        burnFactor = burn;
+        FuelLiters = Mathf.Min(FuelLiters, TankSize);
+    }
+
     void Start()
     {
+        fillerCap = transform.Find("FuelCap");
+        if (fillerCap != null)
+        {
+            fillerRest = fillerCap.localPosition;
+            fillerRestRotation = fillerCap.localRotation;
+        }
+
         // Подшаги колёс убирают дрожание подвески на малых скоростях.
         if (wheels.Count > 0)
             wheels[0].Collider.ConfigureVehicleSubsteps(5f, 12, 15);
@@ -136,13 +170,13 @@ public class VehicleController : MonoBehaviour
 
     public void SetFuel(float liters)
     {
-        FuelLiters = Mathf.Clamp(liters, 0f, TankCapacity);
+        FuelLiters = Mathf.Clamp(liters, 0f, TankSize);
     }
 
     // Возвращает, сколько вошло: лишнее остаётся в канистре.
     public float AddFuel(float liters)
     {
-        float accepted = Mathf.Min(liters, TankCapacity - FuelLiters);
+        float accepted = Mathf.Min(liters, TankSize - FuelLiters);
         FuelLiters += accepted;
         if (WorldSync.Instance != null)
             WorldSync.Instance.AnnounceFuelAdded(accepted);
@@ -151,7 +185,7 @@ public class VehicleController : MonoBehaviour
 
     public void AddFuelFromNetwork(float liters)
     {
-        FuelLiters = Mathf.Min(FuelLiters + liters, TankCapacity);
+        FuelLiters = Mathf.Min(FuelLiters + liters, TankSize);
     }
 
     public void SetDriverInput(Vector2 move)
@@ -171,7 +205,7 @@ public class VehicleController : MonoBehaviour
                 depth = OptimizedForestGenerator.MudDepth(hit.point.x, hit.point.z);
             total += depth;
 
-            SetStiffness(wheel.Collider, Mathf.Lerp(1f, MudForwardStiffness, depth), Mathf.Lerp(1f, MudSidewaysStiffness, depth));
+            SetStiffness(wheel.Collider, Mathf.Lerp(1f, Mathf.Lerp(MudForwardStiffness, 1f, mudGrip), depth), Mathf.Lerp(1f, Mathf.Lerp(MudSidewaysStiffness, 1f, mudGrip), depth));
         }
 
         CurrentMudDepth = wheels.Count > 0 ? total / wheels.Count : 0f;
@@ -185,7 +219,7 @@ public class VehicleController : MonoBehaviour
         if (speed < 0.001f)
             return;
 
-        float resistance = CurrentMudDepth * (MudResistanceBase + MudResistancePerSpeed * speed);
+        float resistance = CurrentMudDepth * (1f - mudGrip) * (MudResistanceBase + MudResistancePerSpeed * speed);
         resistance = Mathf.Min(resistance, body.mass * speed / Time.fixedDeltaTime);
         body.AddForce(-velocity / speed * resistance, ForceMode.Force);
     }
@@ -263,17 +297,17 @@ public class VehicleController : MonoBehaviour
         ApplyAntiRoll();
 
         if (EngineRunning)
-            FuelLiters = Mathf.Max(0f, FuelLiters - (IdleBurn + ThrottleBurn * Mathf.Abs(throttle)) * Time.fixedDeltaTime);
+            FuelLiters = Mathf.Max(0f, FuelLiters - (IdleBurn + ThrottleBurn * Mathf.Abs(throttle) * (1f + MudBurn * CurrentMudDepth)) * burnFactor * Time.fixedDeltaTime);
 
         float speed = ForwardSpeed;
         float absSpeed = Mathf.Abs(speed);
-        float limit = MaxSpeed;
+        float limit = MaxSpeed * speedFactor;
         if (throttle < 0f)
             limit *= ReverseSpeedFactor;
 
         // Газ против движения сначала тормозит машину и только потом включает обратный ход.
         bool opposing = throttle * speed < 0f && absSpeed > OpposingSpeedThreshold;
-        float motor = opposing || HandbrakeOn || !EngineRunning ? 0f : throttle * MotorTorque * Mathf.Clamp01(1f - absSpeed / limit);
+        float motor = opposing || HandbrakeOn || !EngineRunning ? 0f : throttle * MotorTorque * torqueFactor * Mathf.Clamp01(1f - absSpeed / limit);
 
         float brake = RollingResistance;
         if (HandbrakeOn)
@@ -308,6 +342,12 @@ public class VehicleController : MonoBehaviour
     {
         // Грязь и пыль на кузове считаются от машины, иначе плыли бы по нему на ходу.
         Shader.SetGlobalMatrix(WorldToLocalId, transform.worldToLocalMatrix);
+
+        if (fillerCap != null)
+        {
+            fillerAngle = Mathf.Lerp(fillerAngle, FillerOpen ? FillerSwing : 0f, 1f - Mathf.Exp(-FillerResponse * Time.deltaTime));
+            fillerCap.SetLocalPositionAndRotation(fillerRest + new Vector3(fillerAngle / FillerSwing * 0.06f, 0f, 0f), fillerRestRotation * Quaternion.Euler(0f, 0f, fillerAngle));
+        }
 
         foreach (Wheel wheel in wheels)
         {

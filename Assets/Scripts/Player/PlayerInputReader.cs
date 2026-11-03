@@ -11,14 +11,15 @@ public class PlayerInputReader : MonoBehaviour
     public bool GrabHeld { get; private set; }
     public bool PushHeld { get; private set; }
     public bool InteractHeld { get; private set; }
+    public bool WrenchHeld { get; private set; }
 
     // Выбор в разговоре: номер нажатой клавиши на этот кадр, 0 — ничего. Читают его в Update.
     public int ChoicePressed { get; private set; }
 
-    const int MaxChoices = 5;
+    const int MaxChoices = 7;
 
     InputActionMap map;
-    InputAction move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, wipers, recover, cancel;
+    InputAction wrench, move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, wipers, recover, cancel;
     readonly InputAction[] choices = new InputAction[MaxChoices];
     bool grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, wipersLatched, recoverLatched, skipLatched;
 
@@ -43,6 +44,7 @@ public class PlayerInputReader : MonoBehaviour
         flashlight = map.AddAction("Flashlight", InputActionType.Button, "<Keyboard>/t");
         headlights = map.AddAction("Headlights", InputActionType.Button, "<Keyboard>/l");
         wipers = map.AddAction("Wipers", InputActionType.Button, "<Keyboard>/v");
+        wrench = map.AddAction("Wrench", InputActionType.Button, "<Keyboard>/g");
         recover = map.AddAction("Recover", InputActionType.Button, "<Keyboard>/r");
         cancel = map.AddAction("Cancel", InputActionType.Button, "<Keyboard>/escape");
         for (int i = 0; i < MaxChoices; i++)
@@ -72,6 +74,7 @@ public class PlayerInputReader : MonoBehaviour
             GrabHeld = false;
             PushHeld = false;
             InteractHeld = false;
+            WrenchHeld = false;
             return;
         }
 
@@ -80,6 +83,7 @@ public class PlayerInputReader : MonoBehaviour
         GrabHeld = grab.IsPressed();
         PushHeld = push.IsPressed();
         InteractHeld = interact.IsPressed();
+        WrenchHeld = wrench.IsPressed();
 
         for (int i = 0; i < MaxChoices; i++)
         {

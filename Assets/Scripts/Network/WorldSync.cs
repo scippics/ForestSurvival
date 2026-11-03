@@ -66,6 +66,79 @@ public class WorldSync : NetworkBehaviour
         Instance = this;
         car = FindAnyObjectByType<VehicleController>();
         carBody = car.GetComponent<Rigidbody>();
+
+        // Подключившийся позже просит то, что мир не может построить сам: снятые детали и слитые баки.
+        if (!IsServer)
+            RequestWorldStateRpc();
+    }
+
+    [Rpc(SendTo.Server)]
+    void RequestWorldStateRpc()
+    {
+        foreach (KeyValuePair<string, AbandonedCar.State> pair in AbandonedCar.States)
+            WreckRpc(pair.Key, pair.Value.Liters, pair.Value.TakenMask);
+        foreach (KeyValuePair<CarSlot, CarPartKind> pair in CarUpgrades.Instance.Mounted)
+            MountedRpc((int)pair.Key, true, (int)pair.Value);
+        foreach (CarPartItem item in FindObjectsByType<CarPartItem>(FindObjectsSortMode.None))
+            ItemCreatedRpc(item.name, item.transform.position, item.transform.rotation);
+    }
+
+    public void AnnounceWreck(string id, float liters, int takenMask)
+    {
+        if (HasClients)
+            WreckRpc(id, liters, takenMask);
+    }
+
+    [Rpc(SendTo.NotMe)]
+    void WreckRpc(FixedString64Bytes id, float liters, int takenMask)
+    {
+        AbandonedCar.ApplyState(id.ToString(), liters, takenMask);
+    }
+
+    public void AnnounceMounted(CarSlot slot, bool present, CarPartKind kind)
+    {
+        if (HasClients)
+            MountedRpc((int)slot, present, (int)kind);
+    }
+
+    [Rpc(SendTo.NotMe)]
+    void MountedRpc(int slot, bool present, int kind)
+    {
+        CarUpgrades.Instance.SetFromNetwork((CarSlot)slot, present, (CarPartKind)kind);
+    }
+
+    public void AnnounceItemCreated(string itemName, Vector3 position, Quaternion rotation)
+    {
+        if (HasClients)
+            ItemCreatedRpc(itemName, position, rotation);
+    }
+
+    [Rpc(SendTo.NotMe)]
+    void ItemCreatedRpc(FixedString64Bytes itemName, Vector3 position, Quaternion rotation)
+    {
+        string key = itemName.ToString();
+        if (TryGetItem(key, out _) || !CarPartItem.TryParseKind(key, out CarPartKind kind))
+            return;
+        GameObject created = CarPartItem.Create(key, kind, position, rotation);
+        items[key] = created.GetComponent<Rigidbody>();
+        OptimizedForestGenerator forest = FindAnyObjectByType<OptimizedForestGenerator>();
+        if (forest != null)
+            forest.Track(created.GetComponent<Rigidbody>());
+    }
+
+    public void AnnounceItemRemoved(string itemName)
+    {
+        if (HasClients)
+            ItemRemovedRpc(itemName);
+    }
+
+    [Rpc(SendTo.NotMe)]
+    void ItemRemovedRpc(FixedString64Bytes itemName)
+    {
+        string key = itemName.ToString();
+        if (TryGetItem(key, out Rigidbody body))
+            Destroy(body.gameObject);
+        items.Remove(key);
     }
 
     public override void OnNetworkDespawn()

@@ -8,6 +8,7 @@ public class FirstPersonArms : MonoBehaviour
     const float HandSpread = 0.15f;
     const float Response = 13f;
     const float HiddenDrop = 0.55f;
+    const float WrenchSwingSpeed = 9f;
 
     static readonly Vector3 LeftShoulder = new Vector3(-0.3f, -0.42f, -0.05f);
     static readonly Vector3 RightShoulder = new Vector3(0.3f, -0.42f, -0.05f);
@@ -27,6 +28,8 @@ public class FirstPersonArms : MonoBehaviour
     PlayerHands hands;
     PlayerSeat seat;
     PlayerCamera view;
+    PlayerWrench wrench;
+    Transform wrenchModel;
     Arm left;
     Arm right;
     Transform torch;
@@ -39,6 +42,7 @@ public class FirstPersonArms : MonoBehaviour
         hands = GetComponentInParent<PlayerHands>();
         seat = GetComponentInParent<PlayerSeat>();
         view = GetComponent<PlayerCamera>();
+        wrench = GetComponentInParent<PlayerWrench>();
         left = BuildArm(LeftShoulder);
         right = BuildArm(RightShoulder);
 
@@ -47,6 +51,14 @@ public class FirstPersonArms : MonoBehaviour
         Material metal = ProceduralModels.Lit(TorchColor, 0f, 0f, 0.5f);
         Bare(ProceduralModels.Part(torch, "TorchBody", PrimitiveType.Cylinder, new Vector3(0f, 0.03f, 0.05f), new Vector3(0.042f, 0.09f, 0.042f), metal, Quaternion.Euler(90f, 0f, 0f)));
         Bare(ProceduralModels.Part(torch, "TorchHead", PrimitiveType.Cylinder, new Vector3(0f, 0.03f, 0.15f), new Vector3(0.062f, 0.025f, 0.062f), metal, Quaternion.Euler(90f, 0f, 0f)));
+
+        // Гаечный ключ: появляется в руке на время работы и ходит туда-обратно.
+        wrenchModel = new GameObject("WrenchModel").transform;
+        wrenchModel.SetParent(right.Hand, false);
+        Material steel = ProceduralModels.Lit(new Color(0.34f, 0.34f, 0.34f), 0f, 0f, 0.55f);
+        Bare(ProceduralModels.Part(wrenchModel, "WrenchShaft", PrimitiveType.Cube, new Vector3(0f, 0f, 0.12f), new Vector3(0.022f, 0.01f, 0.2f), steel));
+        Bare(ProceduralModels.Part(wrenchModel, "WrenchHead", PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.235f), new Vector3(0.05f, 0.008f, 0.05f), steel));
+        wrenchModel.gameObject.SetActive(false);
     }
 
     Arm BuildArm(Vector3 shoulder)
@@ -92,8 +104,19 @@ public class FirstPersonArms : MonoBehaviour
             rightTarget = TorchHand;
         }
 
+        bool working = wrench.WorkPoint.HasValue;
+        wrenchModel.gameObject.SetActive(working);
+        if (working)
+        {
+            torch.gameObject.SetActive(false);
+            Vector3 point = transform.InverseTransformPoint(wrench.WorkPoint.Value);
+            float swing = Mathf.Sin(Time.time * WrenchSwingSpeed);
+            rightTarget = Clamp(right.Shoulder, point + new Vector3(swing * 0.05f, -0.06f, -0.2f));
+            wrenchModel.localRotation = Quaternion.Euler(0f, swing * 35f, 0f);
+        }
+
         Pose(left, leftTarget, holding);
-        Pose(right, rightTarget, holding || torchOn);
+        Pose(right, rightTarget, holding || torchOn || working);
     }
 
     static Vector3 Clamp(Vector3 shoulder, Vector3 target)

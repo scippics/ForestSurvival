@@ -24,12 +24,12 @@ public static class InteractionRay
         return hit.rigidbody != null && hit.rigidbody.CompareTag(PickupableTag);
     }
 
-    // Шланг в руках, канистра под прицелом и источник рядом: ЛКМ качает, а не отпускает шланг.
+    // Шланг вставлен в бак, конец в руках, канистра под прицелом: ЛКМ качает, а не отпускает шланг.
     public static bool IsFuelTransfer(FuelSiphon siphon, RaycastHit hit)
     {
-        return siphon != null && hit.collider.CompareTag(JerrycanTag)
+        return siphon != null && !siphon.IsFlowing && hit.collider.CompareTag(JerrycanTag)
                && hit.rigidbody.TryGetComponent(out FuelCan can) && !can.IsFull
-               && siphon.IsNearFuelSource();
+               && siphon.CanReach(can);
     }
 
     // Точка прицела раскрывается только там, где действие сейчас действительно доступно:
@@ -39,10 +39,20 @@ public static class InteractionRay
     {
         if (!handsFull && IsPickupable(hit))
             return true;
-        return hit.collider.CompareTag(FuelSourceTag)
+        return IsFiller(hit, out _)
                || IsFuelTransfer(heldSiphon, hit)
+               || hit.collider.GetComponent<SalvagePart>() != null
                || IsFreeVehicle(hit, out _)
                || (!handsFull && (IsDoor(hit, out _) || IsNpc(hit, out _)));
+    }
+
+    public static bool IsFiller(RaycastHit hit, out AbandonedCar car)
+    {
+        car = null;
+        if (!hit.collider.CompareTag(FuelSourceTag))
+            return false;
+        car = hit.collider.GetComponentInParent<AbandonedCar>();
+        return car != null;
     }
 
     public static bool IsDoor(RaycastHit hit, out HouseDoor door)

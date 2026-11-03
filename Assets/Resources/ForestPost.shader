@@ -120,8 +120,9 @@ Shader "Hidden/ForestPost"
     {
         // Четыре отсчёта между текселами дают каждому классу шаблона 4 на 4 равный вес, и шаблон исчезает.
         float4 center = tex2D(_MainTex, i.uv);
-        float total = 0.0;
-        float weight = 0.0001;
+        // Малый вес центра: если все соседи за разрывом глубины, остаётся он сам, а не чёрная точка.
+        float total = center.r * 0.01;
+        float weight = 0.01;
         for (int s = 0; s < 4; s++)
         {
             float4 taken = tex2D(_MainTex, i.uv + _AoDirection * (s - 1.5));

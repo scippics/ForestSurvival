@@ -6,7 +6,7 @@ public class InteractionUI : MonoBehaviour
 {
     const string PromptTake = "ЛКМ - Взять";
     const string PromptPush = "F - Толкать машину";
-    const string PromptTransfer = "Зажать ЛКМ - Перелить топливо";
+    const string PromptTransfer = "Зажать ЛКМ - Подсосать бензин";
     const string PromptHolding = "ЛКМ - Отпустить, ПКМ - Бросить";
     const string PromptRead = "ЛКМ - Читать";
     const string PromptDoorOpen = "ЛКМ - Открыть дверь";
@@ -15,7 +15,10 @@ public class InteractionUI : MonoBehaviour
     const string PromptCloseNote = "ЛКМ - Убрать записку";
     const string PromptPour = "Зажать E - Залить в бак: ";
     const string PromptNoFuel = "Бак пуст: мотор не заведётся\n";
-    const string PromptPressure = "Отпустить на 75-95. Давление: ";
+    const string PromptInsert = "ЛКМ - Вставить шланг в бак";
+    const string PromptNeedHose = "Горловина бака: нужен шланг";
+    const string PromptTooFar = "Шланг не достаёт до канистры";
+    const string PromptFiller = "Подойди к горловине бака: сзади слева";
     const string PromptEnter = "E - Сесть за руль";
     const string PromptDriving = "E - Выйти, L - Фары, V - Дворники: ";
     const string PromptHandbrake = ", Пробел - Ручник: ";
@@ -44,6 +47,7 @@ public class InteractionUI : MonoBehaviour
 
     PlayerHands hands;
     PlayerSeat seat;
+    PlayerWrench wrench;
     GUIStyle promptStyle;
     Image dot;
     float dotOpenness;
@@ -52,6 +56,7 @@ public class InteractionUI : MonoBehaviour
     {
         hands = GetComponentInParent<PlayerHands>();
         seat = GetComponentInParent<PlayerSeat>();
+        wrench = GetComponentInParent<PlayerWrench>();
         CreateDot();
     }
 
@@ -120,6 +125,14 @@ public class InteractionUI : MonoBehaviour
 
     string ResolvePrompt(bool aimed, RaycastHit hit)
     {
+        string basic = ResolveBasic(aimed, hit);
+        if (string.IsNullOrEmpty(wrench.Prompt))
+            return basic;
+        return string.IsNullOrEmpty(basic) ? wrench.Prompt : basic + "\n" + wrench.Prompt;
+    }
+
+    string ResolveBasic(bool aimed, RaycastHit hit)
+    {
         if (seat.IsSeated)
         {
             string driving = PromptDriving + WiperNames[seat.Vehicle.WiperMode] + PromptHandbrake + (seat.Vehicle.HandbrakeOn ? "вкл" : "выкл");
@@ -136,12 +149,16 @@ public class InteractionUI : MonoBehaviour
             return "";
 
         if (hands.HeldSiphon != null && hands.HeldSiphon.IsPumping)
-            return PromptPressure + Mathf.FloorToInt(hands.HeldSiphon.SiphonPressure);
+            return "";
 
         // Сзади машины можно и толкать, и заливать: с канистрой в руках важнее бак.
         if (aimed && hands.Held != null && hands.Held.TryGetComponent(out FuelCan heldCan) && heldCan.Liters > 0f
-            && InteractionRay.IsFreeVehicle(hit, out VehicleController car) && car.FuelLiters < VehicleController.TankCapacity)
+            && InteractionRay.IsFreeVehicle(hit, out VehicleController car) && car.FuelLiters < car.TankSize)
+        {
+            if (Vector3.Distance(transform.position, car.FillerPoint) > PlayerSeat.PourReach)
+                return PromptFiller;
             return PromptPour + Mathf.RoundToInt(heldCan.Liters) + " л, в баке " + Mathf.RoundToInt(car.FuelLiters) + " л";
+        }
 
         // Луч из зоны толкания не может попасть в её триггер: начало луча внутри него.
         // Поэтому подсказка опирается на сам факт нахождения в зоне, где F и работает.
@@ -150,10 +167,22 @@ public class InteractionUI : MonoBehaviour
 
         if (aimed)
         {
+            if (InteractionRay.IsFiller(hit, out _))
+            {
+                if (hands.HeldSiphon == null)
+                    return PromptNeedHose;
+                if (hands.HeldSiphon.Source == null)
+                    return PromptInsert;
+            }
+            if (hands.HeldSiphon != null && hit.collider.CompareTag(InteractionRay.JerrycanTag) && hands.HeldSiphon.Source != null
+                && hit.rigidbody.TryGetComponent(out FuelCan farCan) && !hands.HeldSiphon.CanReach(farCan))
+                return PromptTooFar;
             if (hands.Held == null && InteractionRay.IsPickupable(hit))
             {
                 if (hit.rigidbody.TryGetComponent(out NoteItem _))
                     return PromptRead;
+                if (hit.rigidbody.TryGetComponent(out CarPartItem aimedPart))
+                    return PromptTake + ": " + aimedPart.Info.Name + " (" + Mathf.RoundToInt(hit.rigidbody.mass) + " кг)";
                 return hit.rigidbody.TryGetComponent(out FuelCan aimedCan) ? PromptTake + CanLiters(aimedCan) : PromptTake;
             }
             if (hands.Held == null && InteractionRay.IsNpc(hit, out _))

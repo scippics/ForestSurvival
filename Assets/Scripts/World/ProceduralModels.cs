@@ -231,29 +231,6 @@ public static class ProceduralModels
         Part(stake, "StakeRag", PrimitiveType.Cube, new Vector3(0.16f, 1.48f, 0f), new Vector3(0.3f, 0.2f, 0.012f), Lit(new Color(0.45f, 0.04f, 0.03f), 0f, 0f, 0.05f, 9), Quaternion.Euler(0f, 18f, -8f));
     }
 
-    // Сам объект — только коллайдер с тегом: луч и сифон проверяют именно его.
-    public static GameObject CreateFuelSource(string name, Vector3 position)
-    {
-        var root = new GameObject(name) { tag = InteractionRay.FuelSourceTag };
-        root.transform.position = position;
-        Transform t = root.transform;
-        root.AddComponent<BoxCollider>().size = new Vector3(2f, 2f, 2f);
-
-        Part(t, "Pallet", PrimitiveType.Cube, new Vector3(0f, -0.93f, 0f), new Vector3(2f, 0.14f, 2f), Lit(OldPlankColor, 0f, 1f));
-        Material drum = Lit(DrumColor, 0f, 0.5f, 0.25f);
-        foreach (Vector2 spot in new[] { new Vector2(-0.48f, -0.48f), new Vector2(0.48f, -0.48f), new Vector2(0f, 0.48f) })
-        {
-            Part(t, "Drum", PrimitiveType.Cylinder, new Vector3(spot.x, -0.08f, spot.y), new Vector3(0.9f, 0.78f, 0.9f), drum);
-            Part(t, "DrumRim", PrimitiveType.Cylinder, new Vector3(spot.x, 0.72f, spot.y), new Vector3(0.93f, 0.03f, 0.93f), Lit(CapColor));
-            Part(t, "DrumBase", PrimitiveType.Cylinder, new Vector3(spot.x, -0.84f, spot.y), new Vector3(0.93f, 0.03f, 0.93f), Lit(CapColor));
-            foreach (float y in new[] { -0.33f, 0.2f })
-                Part(t, "DrumRib", PrimitiveType.Cylinder, new Vector3(spot.x, y, spot.y), new Vector3(0.92f, 0.018f, 0.92f), drum);
-            Part(t, "DrumBung", PrimitiveType.Cylinder, new Vector3(spot.x + 0.27f, 0.76f, spot.y), new Vector3(0.09f, 0.018f, 0.09f), Lit(BrassColor * 0.5f, 0f, 0f, 0.5f));
-            Part(t, "DrumLabel", PrimitiveType.Cube, new Vector3(spot.x, 0.15f, spot.y - 0.451f), new Vector3(0.3f, 0.2f, 0.004f), Lit(PaperColor * 0.45f, 0f, 1f));
-        }
-        return root;
-    }
-
     public static void BuildMannequin(Transform player)
     {
         CharacterModel.Build(player, MannequinName, MannequinHeadName);

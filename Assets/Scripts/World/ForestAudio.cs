@@ -88,10 +88,21 @@ public class ForestAudio : MonoBehaviour
         source.Play();
     }
 
+    static bool pouringNow;
+    static bool flowingNow;
+
+    // Бензин течёт сам, пока идёт слив, даже когда игрок ничего не льёт.
+    public static void SetFlowing(bool on)
+    {
+        flowingNow = on;
+        SetPouring(pouringNow);
+    }
+
     public static void SetPouring(bool on)
     {
+        pouringNow = on;
         if (instance != null)
-            instance.pour.volume = on ? 0.5f : 0f;
+            instance.pour.volume = on ? 0.5f : flowingNow ? 0.22f : 0f;
     }
 
     void Awake()

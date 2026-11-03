@@ -8,7 +8,8 @@ using UnityEngine;
 public static class SaveSystem
 {
     const string FileName = "save.json";
-    const int CurrentVersion = 2;
+    const int CurrentVersion = 3;
+    const int OldestReadable = 2;
 
     [Serializable]
     class ItemState
@@ -17,6 +18,14 @@ public static class SaveSystem
         public Vector3 position;
         public Quaternion rotation;
         public float liters;
+    }
+
+    [Serializable]
+    class WreckState
+    {
+        public string id;
+        public float liters;
+        public int takenMask;
     }
 
     [Serializable]
@@ -40,6 +49,8 @@ public static class SaveSystem
         public List<Vector2Int> visitedCamps = new List<Vector2Int>();
         public List<string> recipes = new List<string>();
         public List<ItemState> items = new List<ItemState>();
+        public List<WreckState> wrecks = new List<WreckState>();
+        public List<int> mountedParts = new List<int>();
     }
 
     static string SavePath => Path.Combine(Application.persistentDataPath, FileName);
@@ -76,6 +87,11 @@ public static class SaveSystem
             visitedCamps = forest.VisitedCamps,
             recipes = new List<string>(player.GetComponent<BlueprintNotebook>().unlockedRecipes)
         };
+
+        foreach (KeyValuePair<string, AbandonedCar.State> wreck in AbandonedCar.States)
+            data.wrecks.Add(new WreckState { id = wreck.Key, liters = wreck.Value.Liters, takenMask = wreck.Value.TakenMask });
+        foreach (CarPartKind kind in vehicle.GetComponent<CarUpgrades>().Mounted.Values)
+            data.mountedParts.Add((int)kind);
 
         foreach (Rigidbody body in UnityEngine.Object.FindObjectsByType<Rigidbody>(FindObjectsSortMode.None))
         {
@@ -114,7 +130,17 @@ public static class SaveSystem
         PlaceBody(vehicle.GetComponent<Rigidbody>(), data.vehiclePosition, data.vehicleRotation);
         vehicle.SetLights(data.lightsOn);
         vehicle.HandbrakeOn = data.handbrakeOn;
+
+        // Сначала детали: от них зависит размер бака.
+        var upgrades = vehicle.GetComponent<CarUpgrades>();
+        upgrades.ClearAll();
+        foreach (int kind in data.mountedParts)
+            upgrades.Mount((CarPartKind)kind, out _);
         vehicle.SetFuel(data.fuelLiters);
+
+        foreach (WreckState wreck in data.wrecks)
+            AbandonedCar.ApplyState(wreck.id, wreck.liters, wreck.takenMask);
+
         UnityEngine.Object.FindAnyObjectByType<StoryDirector>().Resume((StoryStage)data.storyStage, data.campNoteRead);
 
         var notebook = player.GetComponent<BlueprintNotebook>();
@@ -149,6 +175,13 @@ public static class SaveSystem
         forest.VisitedCamps = data.visitedCamps ?? new List<Vector2Int>();
         foreach (ItemState item in saved.Values)
         {
+            if (CarPartItem.TryParseKind(item.name, out CarPartKind partKind))
+            {
+                GameObject part = CarPartItem.Create(item.name, partKind, item.position, item.rotation);
+                forest.Track(part.GetComponent<Rigidbody>());
+                continue;
+            }
+
             if (!item.name.StartsWith(ProceduralModels.LootPrefix))
                 continue;
 
@@ -193,7 +226,7 @@ public static class SaveSystem
             if (!File.Exists(SavePath))
                 return false;
             data = JsonUtility.FromJson<SaveData>(File.ReadAllText(SavePath));
-            return data != null && data.version == CurrentVersion;
+            return data != null && data.version >= OldestReadable && data.version <= CurrentVersion;
         }
         catch (Exception exception)
         {

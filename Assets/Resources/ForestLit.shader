@@ -85,11 +85,34 @@ Shader "Forest/Lit"
                     float wear = tex2D(_ForestNoise, q.xy * 1.3 + q.z).g;
                     albedo *= (0.62 + 0.38 * pow(channel, 0.35)) * (0.75 + 0.5 * wear);
                 }
-                else
+                else if (_Surface < 9.5)
                 {
                     float cloth = tex2D(_ForestNoise, q.xy * 5.0 + q.z * 3.0).b;
                     float wear = tex2D(_ForestNoise, q.yz * 1.1 + q.x).g;
                     albedo *= (0.78 + 0.44 * cloth) * (0.75 + 0.5 * wear);
+                }
+                else
+                {
+                    // 10 — брошенное железо: краска сходит пятнами, а наверху деталей нарос мох.
+                    float3 size = float3(length(unity_ObjectToWorld._m00_m10_m20), length(unity_ObjectToWorld._m01_m11_m21), length(unity_ObjectToWorld._m02_m12_m22));
+                    float3 m = q * size;
+                    float2 flat = m.xy + m.zx * 0.7;
+                    float patch = tex2D(_ForestNoise, flat * 0.47 + seed * 0.13).r;
+                    float blotch = tex2D(_ForestNoise, flat * 1.3 + seed * 0.29).g;
+                    float fine = tex2D(_ForestNoise, flat * 4.3 + seed).b;
+
+                    // Краска выцвела и посерела. Ржавеет только то, что было окрашено: чёрная резина и пластик нет.
+                    float luma = dot(albedo, float3(0.3, 0.6, 0.1));
+                    float3 faded = lerp(luma.xxx, albedo, 0.55) * (0.62 + 0.46 * blotch) * (0.88 + 0.24 * fine);
+                    float rust = smoothstep(0.5, 0.74, patch * 0.62 + blotch * 0.38 + (fine - 0.5) * 0.2) * saturate(luma * 7.0);
+                    float3 oxide = lerp(float3(0.075, 0.038, 0.021), float3(0.03, 0.019, 0.014), fine);
+                    albedo = lerp(faded, oxide, rust);
+                    smoothness *= 1.0 - rust * 0.85;
+
+                    // Мох и грязь только на верхних гранях и едва заметно.
+                    float moss = smoothstep(0.42, 0.5, q.y) * smoothstep(0.55, 0.78, blotch) * saturate(luma * 7.0);
+                    albedo = lerp(albedo, float3(0.024, 0.036, 0.016) * (0.7 + 0.6 * fine), moss * 0.75);
+                    smoothness *= 1.0 - moss;
                 }
             }
             // Материалы салона: 1 — ткань, 2 — пластик с шагренью, 3 — резина.

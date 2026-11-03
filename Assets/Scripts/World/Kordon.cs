@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// Лесной кордон на стартовой поляне: дом лесника, навес с бочками, дровяник, шлагбаум.
+// Лесной кордон на стартовой поляне: дом лесника, дровяник и пустая будка. Больше тут никого и ничего нет.
 // Всё стоит на плоской поляне, а привязка идёт к просеке: дорога ложится от шума, и дом всегда у неё.
 public static class Kordon
 {
@@ -19,8 +19,12 @@ public static class Kordon
     const float DoorHeight = 2f;
     const float DoorAjar = -24f;
     const float TableHeight = 0.78f;
-    const float ShedZ = -8f;
-    const float ShedOffset = 8.5f;
+    const float KennelZ = -5f;
+    const float KennelOffset = 10f;
+    const string StoryWreckId = "story";
+    const float StoryWreckZ = -16f;
+    const float StoryWreckOffset = 6.8f;
+    const float StoryWreckLiters = 40f;
     const int SurfaceWood = 7;
     const int SurfaceCloth = 9;
 
@@ -54,20 +58,15 @@ public static class Kordon
         var root = new GameObject("Kordon").transform;
 
         BuildHouse(root);
-        BuildShed(root);
         BuildWoodpile(root, Beside(13f, 5.5f));
-        BuildKennel(root, Beside(0.1f, 7.4f));
-        BuildMast(root, Beside(9f, 17.5f));
-        BuildBarrier(root, Beside(22f, 4.4f));
-        BuildSign(root, Beside(-21f, 4.6f));
+        BuildKennel(root, Beside(KennelZ, KennelOffset));
 
-        // Двор закрыт забором с трёх сторон, а к дороге открыт.
-        float far = Road(0f) + Side * 20f;
-        Vector3 southRoad = Beside(-18f, 5f);
-        Vector3 northRoad = Beside(17f, 5f);
-        Fence(root, southRoad, new Vector3(far, 0f, -18f));
-        Fence(root, new Vector3(far, 0f, -18f), new Vector3(far, 0f, 17f));
-        Fence(root, new Vector3(far, 0f, 17f), northRoad);
+        // Шланг и канистра у крыльца, а бензин только в брошенной машине дальше по просеке.
+        Vector3 center = Beside(HouseZ, HouseOffset);
+        Quaternion facing = Quaternion.LookRotation(new Vector3(Side, 0f, 0f));
+        ProceduralModels.CreateHose("Item_Hose", center + facing * new Vector3(-1.6f, 0.15f, -HalfDepth - 0.9f)).AddComponent<FuelSiphon>();
+        ProceduralModels.CreateJerrycan("Item_Jerrycan", center + facing * new Vector3(-2.4f, 0.23f, -HalfDepth - 0.7f), facing);
+        WreckBuilder.Spawn(StoryWreckId, 0, Beside(StoryWreckZ, StoryWreckOffset), Side * 12f, 77, StoryWreckLiters, true);
 
         ProceduralModels.CreateCrate("Item_Cube_1", Beside(11f, 6.7f) + Vector3.up * 0.25f);
         ProceduralModels.CreateCrate("Item_Cube_2", Beside(12f, 7.5f) + Vector3.up * 0.25f);
@@ -84,9 +83,9 @@ public static class Kordon
     {
         float distance = Mathf.Abs(x - OptimizedForestGenerator.RoadCenterX(0, z)) - 3.2f;
         distance = Mathf.Min(distance, RectDistance(x, z, Beside(HouseZ, HouseOffset).x, HouseZ, HalfWidth + 2.2f, HalfDepth + 2.2f));
-        distance = Mathf.Min(distance, RectDistance(x, z, Beside(ShedZ, ShedOffset).x, ShedZ, 3.6f, 3f));
+        distance = Mathf.Min(distance, RectDistance(x, z, Beside(StoryWreckZ, StoryWreckOffset).x, StoryWreckZ, 2f, 3f));
         distance = Mathf.Min(distance, RectDistance(x, z, Beside(12.5f, 6.5f).x, 12.5f, 3.2f, 2.4f));
-        distance = Mathf.Min(distance, RectDistance(x, z, Beside(0.1f, 7.4f).x, 0.1f, 1.3f, 1.5f));
+        distance = Mathf.Min(distance, RectDistance(x, z, Beside(KennelZ, KennelOffset).x, KennelZ, 1.3f, 1.5f));
         distance = Mathf.Min(distance, RectDistance(x, z, Beside(2f, 5.5f).x, 2f, 3f, 0.7f));
 
         float wobble = (Mathf.PerlinNoise(x * 0.33f + 40f, z * 0.33f + 17f) - 0.5f) * 4f;
@@ -374,35 +373,6 @@ public static class Kordon
         Box(house, "Coat", new Vector3(-3.27f, 1.2f, -1.2f), new Vector3(0.1f, 0.85f, 0.46f), ProceduralModels.Lit(BlanketColor * 0.8f, 0f, 0f, 0f, SurfaceCloth), null, false);
     }
 
-    static void BuildShed(Transform root)
-    {
-        var shed = new GameObject("Shed").transform;
-        shed.SetParent(root, false);
-        shed.position = Beside(ShedZ, ShedOffset);
-
-        Material post = Wood(LogEndColor);
-        Vector3 size = new Vector3(4.2f, 2.5f, 3.4f);
-        foreach (float x in new[] { -1f, 1f })
-        {
-            foreach (float z in new[] { -1f, 1f })
-            {
-                float height = size.y + x * Side * 0.2f;
-                GameObject stand = ProceduralModels.Part(shed, "ShedPost", PrimitiveType.Cylinder, new Vector3(x * size.x * 0.5f, height * 0.5f, z * size.z * 0.5f), new Vector3(0.16f, height * 0.5f, 0.16f), post);
-                var capsule = stand.AddComponent<CapsuleCollider>();
-                capsule.height = 2f;
-                capsule.radius = 0.5f;
-            }
-        }
-        Box(shed, "ShedRoof", new Vector3(0f, size.y + 0.05f, 0f), new Vector3(size.x + 0.7f, 0.07f, size.z + 0.7f), ProceduralModels.Lit(RoofColor, 0f, 1f, 0.2f), Quaternion.Euler(0f, 0f, Side * 5.4f));
-        Box(shed, "ShedBeam", new Vector3(0f, size.y - 0.04f, size.z * 0.5f), new Vector3(size.x + 0.2f, 0.12f, 0.12f), post, Quaternion.Euler(0f, 0f, Side * 5.4f), false);
-        Box(shed, "ShedBeam", new Vector3(0f, size.y - 0.04f, -size.z * 0.5f), new Vector3(size.x + 0.2f, 0.12f, 0.12f), post, Quaternion.Euler(0f, 0f, Side * 5.4f), false);
-
-        Vector3 center = shed.position;
-        ProceduralModels.CreateFuelSource("FuelSource", center + new Vector3(0f, 1f, 0.3f));
-        ProceduralModels.CreateHose("Item_Hose", center + new Vector3(-Side * 1.5f, 0.15f, -1.15f)).AddComponent<FuelSiphon>();
-        ProceduralModels.CreateJerrycan("Item_Jerrycan", center + new Vector3(-Side * 0.6f, 0.23f, -1.3f), Quaternion.identity);
-    }
-
     static void BuildWoodpile(Transform root, Vector3 center)
     {
         var pile = new GameObject("Woodpile").transform;
@@ -458,95 +428,6 @@ public static class Kordon
         }
     }
 
-    static void BuildMast(Transform root, Vector3 center)
-    {
-        var mast = new GameObject("RadioMast").transform;
-        mast.SetParent(root, false);
-        mast.position = center;
-
-        Material iron = ProceduralModels.Lit(IronColor * 2f, 0f, 0.3f, 0.3f);
-        GameObject pole = ProceduralModels.Part(mast, "MastPole", PrimitiveType.Cylinder, new Vector3(0f, 5f, 0f), new Vector3(0.1f, 5f, 0.1f), iron);
-        var capsule = pole.AddComponent<CapsuleCollider>();
-        capsule.height = 2f;
-        capsule.radius = 0.5f;
-
-        for (int i = 0; i < 3; i++)
-        {
-            float angle = i * Mathf.PI * 2f / 3f + 0.4f;
-            var foot = new Vector3(Mathf.Cos(angle) * 2.6f, 0f, Mathf.Sin(angle) * 2.6f);
-            var top = new Vector3(0f, 7f, 0f);
-            Vector3 middle = (foot + top) * 0.5f;
-            ProceduralModels.Part(mast, "GuyWire", PrimitiveType.Cylinder, middle, new Vector3(0.012f, (top - foot).magnitude * 0.5f, 0.012f), iron, Quaternion.FromToRotation(Vector3.up, top - foot));
-            ProceduralModels.Part(mast, "GuyPeg", PrimitiveType.Cylinder, foot + Vector3.up * 0.1f, new Vector3(0.05f, 0.12f, 0.05f), iron);
-        }
-        foreach (float y in new[] { 8.6f, 9.3f, 9.9f })
-            ProceduralModels.Part(mast, "AntennaBar", PrimitiveType.Cylinder, new Vector3(0f, y, 0f), new Vector3(0.025f, 0.55f, 0.025f), iron, Quaternion.Euler(0f, 0f, 90f));
-    }
-
-    static void BuildBarrier(Transform root, Vector3 center)
-    {
-        var barrier = new GameObject("Barrier").transform;
-        barrier.SetParent(root, false);
-        barrier.position = center;
-
-        GameObject post = ProceduralModels.Part(barrier, "BarrierPost", PrimitiveType.Cube, new Vector3(0f, 0.55f, 0f), new Vector3(0.2f, 1.1f, 0.2f), Wood(LogEndColor), null, true);
-        post.name = "BarrierPost";
-
-        // Поднятая стрела с полосами: шлагбаум открыт, и никто его не опустил.
-        var arm = new GameObject("BarrierArm").transform;
-        arm.SetParent(barrier, false);
-        arm.localPosition = new Vector3(0f, 1.1f, 0f);
-        arm.localRotation = Quaternion.Euler(0f, 0f, Side * 72f);
-        const int stripes = 7;
-        const float stripe = 0.62f;
-        for (int i = 0; i < stripes; i++)
-            Box(arm, "BarrierStripe", new Vector3(-Side * (i + 0.5f) * stripe, 0f, 0f), new Vector3(stripe, 0.1f, 0.08f), ProceduralModels.Lit(i % 2 == 0 ? RedColor : WhiteColor, 0.5f, 0f, 0.3f), null, false);
-        Box(arm, "BarrierWeight", new Vector3(Side * 0.35f, 0f, 0f), new Vector3(0.6f, 0.18f, 0.16f), ProceduralModels.Lit(IronColor), null, false);
-    }
-
-    static void BuildSign(Transform root, Vector3 center)
-    {
-        var sign = new GameObject("Sign").transform;
-        sign.SetParent(root, false);
-        sign.position = center;
-
-        Material wood = Wood(LogEndColor);
-        foreach (float x in new[] { -0.7f, 0.7f })
-        {
-            GameObject post = ProceduralModels.Part(sign, "SignPost", PrimitiveType.Cylinder, new Vector3(x, 1.1f, 0f), new Vector3(0.1f, 1.1f, 0.1f), wood);
-            var capsule = post.AddComponent<CapsuleCollider>();
-            capsule.height = 2f;
-            capsule.radius = 0.5f;
-        }
-        Box(sign, "SignBoard", new Vector3(0f, 1.75f, 0.02f), new Vector3(1.9f, 0.78f, 0.04f), wood, null, false);
-
-        GameObject face = ProceduralModels.Part(sign, "SignFace", PrimitiveType.Quad, new Vector3(0f, 1.75f, -0.002f), new Vector3(1.8f, 0.68f, 1f), ProceduralModels.CreateLit(Color.white));
-        face.GetComponent<Renderer>().sharedMaterial.mainTexture = ForestTextures.Sign("КОРДОН 7", "СЕВЕРНЫЙ ЛЕСХОЗ", new Color32(44, 66, 44, 255), new Color32(214, 210, 178, 255));
-    }
-
-    static void Fence(Transform root, Vector3 from, Vector3 to)
-    {
-        var fence = new GameObject("Fence").transform;
-        fence.SetParent(root, false);
-
-        Material wood = Wood(LogEndColor * 0.85f);
-        Vector3 along = to - from;
-        float length = along.magnitude;
-        Quaternion rails = Quaternion.LookRotation(along);
-        int spans = Mathf.Max(1, Mathf.RoundToInt(length / 3f));
-
-        for (int i = 0; i <= spans; i++)
-        {
-            Vector3 foot = from + along * (i / (float)spans);
-            // Столбы стоят неровно, как у старого забора.
-            float lean = Mathf.Sin(i * 7.3f + from.x) * 4f;
-            ProceduralModels.Part(fence, "FencePost", PrimitiveType.Cylinder, foot + Vector3.up * 0.65f, new Vector3(0.11f, 0.65f, 0.11f), wood, Quaternion.Euler(lean, 0f, lean * 0.6f));
-        }
-        foreach (float y in new[] { 0.55f, 1.05f })
-            ProceduralModels.Part(fence, "FenceRail", PrimitiveType.Cube, (from + to) * 0.5f + Vector3.up * y, new Vector3(0.05f, 0.09f, length), wood, rails);
-
-        Box(fence, "FenceCollider", (from + to) * 0.5f + Vector3.up * 0.6f, new Vector3(0.12f, 1.2f, length), wood, rails).GetComponent<Renderer>().enabled = false;
-    }
 }
 
 // Пламя лампы дрожит, а тени от неё считаются, только пока игрок рядом.
