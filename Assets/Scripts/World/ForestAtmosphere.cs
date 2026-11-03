@@ -1,15 +1,23 @@
 using UnityEngine;
 
-// Воздух вокруг камеры: пылинки вблизи и клочья тумана над землёй. Частицы живут в мировых
+// Воздух вокруг камеры: пылинки вблизи, клочья тумана и редкие листья на ветру. Частицы живут в мировых
 // координатах, а источник просто идёт за камерой, поэтому они не приклеены к взгляду.
 public class ForestAtmosphere : MonoBehaviour
 {
     const int SoftTextureSize = 64;
     const float MistHeightOffset = -1f;
     const float MistBrightness = 1.5f;
+    const float LeafHeight = 7f;
+    const float LeavesPerSecond = 2.2f;
+    const float LeavesPerWind = 2.6f;
+    const float LeafDrift = 1.7f;
+
+    static readonly Color LeafYellow = new Color(0.62f, 0.5f, 0.14f);
+    static readonly Color LeafRust = new Color(0.42f, 0.2f, 0.07f);
 
     ParticleSystem dust;
     ParticleSystem mist;
+    ParticleSystem leaves;
 
     public static Texture2D SoftTexture { get; private set; }
 
@@ -64,6 +72,78 @@ public class ForestAtmosphere : MonoBehaviour
         ParticleSystem.EmissionModule mistEmission = mist.emission;
         mistEmission.rateOverTime = 2f;
         mist.Play();
+
+        CreateLeaves();
+    }
+
+    // Сгиб посередине: при вращении лист то вспыхивает, то темнеет, как настоящий.
+    static Mesh BuildLeafMesh()
+    {
+        var mesh = new Mesh { name = "Leaf" };
+        mesh.vertices = new[]
+        {
+            new Vector3(0f, 0f, -0.5f), new Vector3(-0.28f, 0.06f, -0.05f), new Vector3(0f, -0.04f, 0.1f),
+            new Vector3(0.28f, 0.06f, -0.05f), new Vector3(0f, 0f, 0.5f)
+        };
+        mesh.uv = new[] { Vector2.one * 0.5f, Vector2.one * 0.5f, Vector2.one * 0.5f, Vector2.one * 0.5f, Vector2.one * 0.5f };
+        mesh.triangles = new[] { 0, 1, 2, 0, 2, 3, 2, 1, 4, 2, 4, 3 };
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
+    }
+
+    void CreateLeaves()
+    {
+        leaves = CreateSystem("Leaves", 0.05f, 180, new Vector3(46f, 10f, 46f));
+        ParticleSystem.MainModule main = leaves.main;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(7f, 12f);
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.1f);
+        main.gravityModifier = 0.045f;
+        main.startRotation3D = true;
+        main.startRotationX = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        main.startRotationY = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        main.startRotationZ = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+
+        ParticleSystem.RotationOverLifetimeModule spin = leaves.rotationOverLifetime;
+        spin.enabled = true;
+        spin.separateAxes = true;
+        spin.x = new ParticleSystem.MinMaxCurve(-3f, 3f);
+        spin.y = new ParticleSystem.MinMaxCurve(-1.5f, 1.5f);
+        spin.z = new ParticleSystem.MinMaxCurve(-4f, 4f);
+
+        ParticleSystem.NoiseModule flutter = leaves.noise;
+        flutter.enabled = true;
+        flutter.strength = 0.7f;
+        flutter.frequency = 0.45f;
+        flutter.scrollSpeed = 0.2f;
+
+        var leafRenderer = leaves.GetComponent<ParticleSystemRenderer>();
+        leafRenderer.renderMode = ParticleSystemRenderMode.Mesh;
+        leafRenderer.mesh = BuildLeafMesh();
+        leafRenderer.alignment = ParticleSystemRenderSpace.Local;
+        leaves.Play();
+    }
+
+    void UpdateLeaves(Vector3 position)
+    {
+        leaves.transform.position = position + Vector3.up * LeafHeight;
+
+        ParticleSystem.EmissionModule emission = leaves.emission;
+        emission.rateOverTime = LeavesPerSecond + ForestWeather.Wind * LeavesPerWind;
+
+        ParticleSystem.VelocityOverLifetimeModule drift = leaves.velocityOverLifetime;
+        drift.enabled = true;
+        drift.space = ParticleSystemSimulationSpace.World;
+        drift.x = ForestWeather.WindDirection.x * ForestWeather.Wind * LeafDrift;
+        drift.y = 0f;
+        drift.z = ForestWeather.WindDirection.y * ForestWeather.Wind * LeafDrift;
+
+        // Частица не освещается сама, поэтому яркость листу задаёт время суток: ночью он почти чёрный.
+        Color fog = RenderSettings.fogColor;
+        float light = Mathf.Clamp01((fog.r + fog.g + fog.b) * 0.9f);
+        ParticleSystem.MainModule main = leaves.main;
+        main.startColor = new ParticleSystem.MinMaxGradient(LeafYellow * light, LeafRust * light);
     }
 
     ParticleSystem CreateSystem(string systemName, float softDistance, int maxParticles, Vector3 area)
@@ -104,6 +184,7 @@ public class ForestAtmosphere : MonoBehaviour
         Vector3 position = view.transform.position;
         dust.transform.position = position;
         mist.transform.position = position + Vector3.up * MistHeightOffset;
+        UpdateLeaves(position);
 
         // Новые частицы берут цвет текущего часа: ночью туман не должен светиться дневным серым.
         Color fog = RenderSettings.fogColor * MistBrightness;

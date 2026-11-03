@@ -49,6 +49,9 @@ Shader "Forest/CustomWindFoliage"
         float _FlutterStrength;
         half _Bark, _Needles, _Grass, _Moss, _Birch;
 
+        // xy — куда дует, z — сила: её считает погода, в дождь она больше.
+        float4 _ForestWind;
+
         UNITY_INSTANCING_BUFFER_START(FoliageProps)
             UNITY_DEFINE_INSTANCED_PROP(fixed4, _Color)
         UNITY_INSTANCING_BUFFER_END(FoliageProps)
@@ -74,7 +77,11 @@ Shader "Forest/CustomWindFoliage"
             // Мелкая дрожь отдельных вершин поверх общего порыва.
             float flutter = sin(t * 6.1 + phase + dot(v.vertex.xyz, float3(3.1, 1.7, 2.3)));
 
-            float3 worldOffset = float3(gustX + flutter * _FlutterStrength / max(_WindStrength, 0.001), 0, gustZ) * (_WindStrength * bend);
+            // Порывы качают вокруг наклона по ветру: дерево не ходит симметрично, а гнётся в одну сторону.
+            float wind = _ForestWind.z;
+            float lean = 0.55 + 0.45 * sin(t * 0.23 + phase * 0.2);
+            float3 steady = float3(_ForestWind.x, 0, _ForestWind.y) * lean * wind;
+            float3 worldOffset = (float3(gustX + flutter * _FlutterStrength / max(_WindStrength, 0.001), 0, gustZ) * wind + steady) * (_WindStrength * bend);
             v.vertex.xyz += mul((float3x3)unity_WorldToObject, worldOffset);
 
             // Свой оттенок у каждого экземпляра: лес не выглядит копией одного дерева.
