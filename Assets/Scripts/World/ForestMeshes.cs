@@ -104,16 +104,32 @@ public static class ForestMeshes
     {
         var builder = new MeshBuilder();
         var random = new System.Random(Seed + 12);
-        int lumps = lowDetail ? 5 : 46;
-        int rings = lowDetail ? 3 : 3;
-        int sides = lowDetail ? 5 : 6;
+        // Вблизи берёза плакучая: тонкие ветви свисают прядями вокруг тёмной сердцевины.
+        if (!lowDetail)
+        {
+            for (int i = 0; i < 9; i++)
+            {
+                float t = (i + 0.5f) / 9f;
+                float angle = (float)random.NextDouble() * Mathf.PI * 2f;
+                float reach = Mathf.Lerp(0.5f, 0.1f, t) * ((float)random.NextDouble() * 0.5f + 0.5f);
+                var center = new Vector3(Mathf.Cos(angle) * reach, Mathf.Lerp(0.5f, 0.92f, t), Mathf.Sin(angle) * reach);
+                float size = Mathf.Lerp(0.3f, 0.16f, t);
+                AddBlob(builder, random, center, new Vector3(size, size * 0.14f, size), 3, 5);
+            }
+            AddBoughs(builder, random, 0.42f, 0.98f, 1.15f, 0.28f, 20, 9, 0.2f, 5);
+            return builder.ToMesh("Birch");
+        }
+
+        int lumps = 5;
+        int rings = 3;
+        int sides = 5;
         for (int i = 0; i < lumps; i++)
         {
             float t = (i + 0.5f) / lumps;
             float height = Mathf.Lerp(0.42f, 0.95f, t);
             float angle = (float)random.NextDouble() * Mathf.PI * 2f;
             float reach = Mathf.Lerp(0.95f, 0.1f, t * t) * ((float)random.NextDouble() * 0.5f + 0.5f);
-            float size = lowDetail ? Mathf.Lerp(1.2f, 0.6f, t) : Mathf.Lerp(0.34f, 0.2f, t);
+            float size = Mathf.Lerp(1.2f, 0.6f, t);
             var center = new Vector3(Mathf.Cos(angle) * reach, height, Mathf.Sin(angle) * reach);
             AddBlob(builder, random, center, new Vector3(size, size * 0.14f, size), rings, sides);
         }
@@ -124,14 +140,10 @@ public static class ForestMeshes
     {
         var builder = new MeshBuilder();
         var random = new System.Random(Seed + 13);
-        for (int i = 0; i < 11; i++)
-        {
-            float angle = i * 2.4f + (float)random.NextDouble();
-            float reach = i == 0 ? 0f : 0.14f + i * 0.03f;
-            float size = i == 0 ? 0.42f : 0.24f;
-            var center = new Vector3(Mathf.Cos(angle) * reach, size * 0.9f, Mathf.Sin(angle) * reach);
-            AddBlob(builder, random, center, new Vector3(size, size, size), 4, 7);
-        }
+
+        // Куст: тёмный комок внутри и торчащие из него ветки с листвой, без гладкого контура.
+        AddBlob(builder, random, new Vector3(0f, 0.3f, 0f), new Vector3(0.32f, 0.28f, 0.32f), 3, 6);
+        AddBoughs(builder, random, 0.08f, 0.82f, 0.7f, 0.3f, 7, 9, -0.12f, 5);
         return builder.ToMesh("Bush");
     }
 
