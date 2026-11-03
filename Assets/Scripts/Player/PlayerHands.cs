@@ -12,12 +12,15 @@ public class PlayerHands : MonoBehaviour
     const float RotationGain = 8f;
     const float MaxAngularSpeed = 10f;
     const float BreakDistance = 2f;
+    const float DragBreakDistance = 3.6f;
+    const float MaxDragForce = 900f;
     const float ThrowImpulse = 12f;
     const float PourAngle = 72f;
 
     public FuelSiphon HeldSiphon { get; private set; }
     public Rigidbody Held { get; private set; }
     public bool PourTilt { get; set; }
+    public bool IsDragging => Held != null && isDragged;
 
     PlayerInputReader input;
     BlueprintNotebook notebook;
@@ -27,6 +30,8 @@ public class PlayerHands : MonoBehaviour
     Transform holdPosition;
 
     Quaternion heldRotationOffset;
+    Vector3 dragLocalPoint;
+    bool isDragged;
     CollisionDetectionMode savedCollisionMode;
     RigidbodyInterpolation savedInterpolation;
     readonly Dictionary<GameObject, int> savedLayers = new Dictionary<GameObject, int>();
@@ -51,8 +56,11 @@ public class PlayerHands : MonoBehaviour
 
         if (Held != null)
         {
-            if (Vector3.Distance(Held.worldCenterOfMass, holdPosition.position) > BreakDistance)
+            Vector3 grip = isDragged ? Held.transform.TransformPoint(dragLocalPoint) : Held.worldCenterOfMass;
+            if (Vector3.Distance(grip, holdPosition.position) > (isDragged ? DragBreakDistance : BreakDistance))
                 Release();
+            else if (isDragged)
+                DriveDragged(grip);
             else
                 DriveHeld();
         }
@@ -87,7 +95,10 @@ public class PlayerHands : MonoBehaviour
         if (Held == null)
         {
             if (aimed && InteractionRay.IsPickupable(hit))
+            {
+                dragLocalPoint = hit.rigidbody.transform.InverseTransformPoint(hit.point);
                 Grab(hit.rigidbody);
+            }
             else if (aimed && InteractionRay.IsDoor(hit, out HouseDoor door))
                 door.Toggle();
             else if (aimed && InteractionRay.IsNpc(hit, out NpcTalk npc))
@@ -143,6 +154,11 @@ public class PlayerHands : MonoBehaviour
             StoryDirector.Instance.OnNoteRead(note.id);
             return;
         }
+
+        // Завал отпускает землю, как только за него взялись.
+        isDragged = target.TryGetComponent(out RoadBlock block);
+        if (isDragged)
+            block.Free();
 
         Held = target;
         HeldSiphon = target.GetComponent<FuelSiphon>();
@@ -205,6 +221,15 @@ public class PlayerHands : MonoBehaviour
         Held = null;
         HeldSiphon = null;
         PourTilt = false;
+    }
+
+    // Длинное дерево не несут, а тащат за то место, где взялись: один конец поднят, другой волочится по земле.
+    void DriveDragged(Vector3 grip)
+    {
+        Vector3 toTarget = holdPosition.position - grip;
+        Vector3 desired = playerBody.linearVelocity + Vector3.ClampMagnitude(toTarget * PositionGain, MaxCarrySpeed);
+        Vector3 force = Held.mass * (desired - Held.GetPointVelocity(grip)) * VelocityResponse;
+        Held.AddForceAtPosition(Vector3.ClampMagnitude(force, MaxDragForce), grip, ForceMode.Force);
     }
 
     void DriveHeld()

@@ -109,6 +109,9 @@ public class OptimizedForestGenerator : MonoBehaviour
     static readonly Dictionary<Vector2Int, Camp> CampCache = new Dictionary<Vector2Int, Camp>();
     static readonly Dictionary<Vector2Int, WreckSite> WreckCache = new Dictionary<Vector2Int, WreckSite>();
 
+    const double RoadBlockChance = 0.13;
+    const int RoadBlockMinRow = 2;
+    const double RoadBlockTreeChance = 0.6;
     const double WreckChance = 0.2;
     const double WreckByRoadChance = 0.6;
     const float CrownLodDistance = 30f;
@@ -121,6 +124,9 @@ public class OptimizedForestGenerator : MonoBehaviour
     public int LastGrassBatchesTotal { get; private set; }
     public int LastGrassBatchesDrawn { get; private set; }
     public int LastTreeChunksDrawn { get; private set; }
+
+    // Чанки, где завал уже лёг: сдвинутый не должен появиться снова.
+    public List<Vector2Int> VisitedBlocks { get; set; } = new List<Vector2Int>();
 
     // Стоянки, где лут уже выпал: дальше за него отвечает сохранение, а не генератор.
     public List<Vector2Int> VisitedCamps { get; set; } = new List<Vector2Int>();
@@ -411,6 +417,37 @@ public class OptimizedForestGenerator : MonoBehaviour
         float dx = x - site.X;
         float dz = z - site.Z;
         return dx * dx + dz * dz < site.Radius * site.Radius;
+    }
+
+    // Завал ложится поперёк дороги один раз за игру. Дерево закрывает её почти целиком, ветки лежат кучей.
+    void AcquireRoadBlock(Chunk chunk)
+    {
+        Vector2Int coord = chunk.Coord;
+        if (Mathf.Abs(coord.y) < RoadBlockMinRow || VisitedBlocks.Contains(coord))
+            return;
+        VisitedBlocks.Add(coord);
+
+        var random = new System.Random(ChunkSeed(coord, 21));
+        if (random.NextDouble() >= RoadBlockChance)
+            return;
+
+        float z = coord.y * ChunkSize + ((float)random.NextDouble() * 2f - 1f) * ChunkSize * 0.35f;
+        float road = RoadCenterX(coord.x, z);
+        string site = coord.x + "." + coord.y;
+        if (random.NextDouble() < RoadBlockTreeChance)
+        {
+            PlaceBlock(site, 0, RoadBlock.KindTree, road + ((float)random.NextDouble() - 0.5f) * 1.5f, z, ((float)random.NextDouble() - 0.5f) * 16f);
+            return;
+        }
+
+        for (int i = 0; i < 4; i++)
+            PlaceBlock(site, i, RoadBlock.KindBranch, road + (i - 1.5f) * 2.1f, z + ((float)random.NextDouble() - 0.5f) * 1.6f, ((float)random.NextDouble() - 0.5f) * 50f);
+    }
+
+    static void PlaceBlock(string site, int index, int kind, float x, float z, float yaw)
+    {
+        var position = new Vector3(x, TerrainHeight(x, z) + 0.17f, z);
+        RoadBlock.Create(RoadBlock.MakeName(site, index, kind), kind, position, Quaternion.Euler(0f, yaw, 0f));
     }
 
     void AcquireWreck(Chunk chunk)
@@ -1052,6 +1089,7 @@ public class OptimizedForestGenerator : MonoBehaviour
             ActivePhysicalTrees += chunk.TreeCount;
             AcquireCamp(chunk);
             AcquireWreck(chunk);
+            AcquireRoadBlock(chunk);
         }
 
         if (chunk.GrassCount == 0 && !chunk.GrassPending)

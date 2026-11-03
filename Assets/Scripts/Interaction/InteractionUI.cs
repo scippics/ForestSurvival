@@ -15,6 +15,7 @@ public class InteractionUI : MonoBehaviour
     const string PromptCloseNote = "ЛКМ - Убрать записку";
     const string PromptPour = "Зажать E - Залить в бак: ";
     const string PromptNoFuel = "Бак пуст: мотор не заведётся\n";
+    const string PromptDrag = "ЛКМ - Оттащить с дороги";
     const string PromptInsert = "ЛКМ - Вставить шланг в бак";
     const string PromptNeedHose = "Горловина бака: нужен шланг";
     const string PromptTooFar = "Шланг не достаёт до канистры";
@@ -181,6 +182,8 @@ public class InteractionUI : MonoBehaviour
             {
                 if (hit.rigidbody.TryGetComponent(out NoteItem _))
                     return PromptRead;
+                if (hit.rigidbody.TryGetComponent(out RoadBlock _))
+                    return PromptDrag;
                 if (hit.rigidbody.TryGetComponent(out CarPartItem aimedPart))
                     return PromptTake + ": " + aimedPart.Info.Name + " (" + Mathf.RoundToInt(hit.rigidbody.mass) + " кг)";
                 return hit.rigidbody.TryGetComponent(out FuelCan aimedCan) ? PromptTake + CanLiters(aimedCan) : PromptTake;

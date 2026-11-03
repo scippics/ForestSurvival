@@ -7,6 +7,7 @@ public class PlayerMovement : NetworkBehaviour
 {
     const float WalkSpeed = 4.5f;
     const float BurdenedSpeedFactor = 0.7f;
+    const float DraggingSpeedFactor = 0.38f;
     const float GroundAcceleration = 40f;
     const float AirAcceleration = 6f;
     const float MaxSlopeAngle = 50f;
@@ -92,6 +93,8 @@ public class PlayerMovement : NetworkBehaviour
         Vector3 current = IsGrounded ? Vector3.ProjectOnPlane(velocity, groundNormal) : new Vector3(velocity.x, 0f, velocity.z);
         float acceleration = IsGrounded ? GroundAcceleration : AirAcceleration;
         float targetSpeed = IsBurdened ? WalkSpeed * BurdenedSpeedFactor : WalkSpeed;
+        if (hands != null && hands.IsDragging)
+            targetSpeed = WalkSpeed * DraggingSpeedFactor;
         Vector3 change = Vector3.ClampMagnitude(wish * targetSpeed - current, acceleration * Time.fixedDeltaTime);
         body.AddForce(change, ForceMode.VelocityChange);
     }

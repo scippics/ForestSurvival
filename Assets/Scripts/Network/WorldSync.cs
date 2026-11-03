@@ -342,6 +342,8 @@ public class WorldSync : NetworkBehaviour
         item.Rotation = rotation;
         item.Velocity = velocity;
         item.Until = Time.time + ItemFollowSeconds;
+        if (body.TryGetComponent(out RoadBlock block))
+            block.Free();
         OptimizedForestGenerator.NetworkFollowed.Add(body);
         if (!body.isKinematic)
             body.isKinematic = true;

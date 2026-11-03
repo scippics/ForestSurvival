@@ -18,6 +18,7 @@ public static class SaveSystem
         public Vector3 position;
         public Quaternion rotation;
         public float liters;
+        public bool moved;
     }
 
     [Serializable]
@@ -51,6 +52,7 @@ public static class SaveSystem
         public List<ItemState> items = new List<ItemState>();
         public List<WreckState> wrecks = new List<WreckState>();
         public List<int> mountedParts = new List<int>();
+        public List<Vector2Int> visitedBlocks = new List<Vector2Int>();
     }
 
     static string SavePath => Path.Combine(Application.persistentDataPath, FileName);
@@ -85,6 +87,7 @@ public static class SaveSystem
             storyStage = (int)story.Stage,
             campNoteRead = story.CampNoteRead,
             visitedCamps = forest.VisitedCamps,
+            visitedBlocks = forest.VisitedBlocks,
             recipes = new List<string>(player.GetComponent<BlueprintNotebook>().unlockedRecipes)
         };
 
@@ -96,7 +99,7 @@ public static class SaveSystem
         foreach (Rigidbody body in UnityEngine.Object.FindObjectsByType<Rigidbody>(FindObjectsSortMode.None))
         {
             if (body.CompareTag(InteractionRay.PickupableTag))
-                data.items.Add(new ItemState { name = body.name, position = body.position, rotation = body.rotation, liters = body.TryGetComponent(out FuelCan can) ? can.Liters : 0f });
+                data.items.Add(new ItemState { name = body.name, position = body.position, rotation = body.rotation, liters = body.TryGetComponent(out FuelCan can) ? can.Liters : 0f, moved = body.TryGetComponent(out RoadBlock block) && !block.IsLodged });
         }
 
         try
@@ -161,6 +164,8 @@ public static class SaveSystem
                 PlaceBody(body, item.position, item.rotation);
                 if (body.TryGetComponent(out FuelCan can))
                     can.SetLiters(item.liters);
+                if (item.moved && body.TryGetComponent(out RoadBlock block))
+                    block.Free();
                 saved.Remove(body.name);
             }
             else
@@ -173,8 +178,17 @@ public static class SaveSystem
         // его ещё нет на месте: всё, что осталось в словаре, создаётся заново.
         var forest = UnityEngine.Object.FindAnyObjectByType<OptimizedForestGenerator>();
         forest.VisitedCamps = data.visitedCamps ?? new List<Vector2Int>();
+        forest.VisitedBlocks = data.visitedBlocks ?? new List<Vector2Int>();
         foreach (ItemState item in saved.Values)
         {
+            if (RoadBlock.TryParseKind(item.name, out int blockKind))
+            {
+                GameObject fallen = RoadBlock.Create(item.name, blockKind, item.position, item.rotation);
+                if (item.moved)
+                    fallen.GetComponent<RoadBlock>().Free();
+                continue;
+            }
+
             if (CarPartItem.TryParseKind(item.name, out CarPartKind partKind))
             {
                 GameObject part = CarPartItem.Create(item.name, partKind, item.position, item.rotation);
