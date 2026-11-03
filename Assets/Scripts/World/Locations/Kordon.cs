@@ -68,6 +68,11 @@ public static class Kordon
         ProceduralModels.CreateJerrycan("Item_Jerrycan", center + facing * new Vector3(-2.4f, 0.23f, -HalfDepth - 0.7f), facing);
         WreckBuilder.Spawn(StoryWreckId, 0, Beside(StoryWreckZ, StoryWreckOffset), Side * 12f, 77, StoryWreckLiters, true);
 
+        // У дровяника всегда есть чем подложить под колёса.
+        ProceduralModels.CreatePlank("Item_Plank_1", Beside(14.5f, 3.6f) + Vector3.up * 0.2f, Quaternion.Euler(0f, 8f, 0f));
+        ProceduralModels.CreatePlank("Item_Plank_2", Beside(15.2f, 3.9f) + Vector3.up * 0.2f, Quaternion.Euler(0f, -6f, 0f));
+        ProceduralModels.CreateStone("Item_Stone_1", Beside(16.2f, 3.4f) + Vector3.up * 0.2f, Quaternion.identity);
+
         ProceduralModels.CreateCrate("Item_Cube_1", Beside(11f, 6.7f) + Vector3.up * 0.25f);
         ProceduralModels.CreateCrate("Item_Cube_2", Beside(12f, 7.5f) + Vector3.up * 0.25f);
         ProceduralModels.CreateCrate("Item_Cube_3", Beside(12f, 7.5f) + Vector3.up * 0.75f);

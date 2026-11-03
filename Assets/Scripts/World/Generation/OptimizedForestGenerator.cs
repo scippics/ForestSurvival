@@ -117,6 +117,7 @@ public class OptimizedForestGenerator : MonoBehaviour
     const double WreckCanChance = 0.15;
     const double WreckKitChance = 0.2;
     const double WreckBatteryChance = 0.25;
+    const double WreckPadChance = 0.45;
     const double WreckByRoadChance = 0.6;
     const float CrownLodDistance = 30f;
     const float LodRefreshDistance = 4f;
@@ -484,6 +485,8 @@ public class OptimizedForestGenerator : MonoBehaviour
             DropWreckLoot(ProceduralModels.KitKind, chunk.Coord, 2, ground, site, random);
         if (random.NextDouble() < WreckBatteryChance)
             DropWreckLoot(ProceduralModels.BatteryKind, chunk.Coord, 3, ground, site, random);
+        if (random.NextDouble() < WreckPadChance)
+            DropWreckLoot(random.NextDouble() < 0.5 ? ProceduralModels.PlankKind : ProceduralModels.StoneKind, chunk.Coord, 4, ground, site, random);
     }
 
     void DropWreckLoot(string kind, Vector2Int coord, int index, Vector3 ground, WreckSite site, System.Random random)

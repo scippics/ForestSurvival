@@ -12,6 +12,8 @@ public static class ProceduralModels
     public const string BatteryKind = "Battery";
     public const string CellsKind = "Cells";
     public const string KitKind = "Kit";
+    public const string PlankKind = "Plank";
+    public const string StoneKind = "Stone";
     public const string MannequinName = "Mannequin";
     public const string MannequinHeadName = "Head";
 
@@ -22,6 +24,8 @@ public static class ProceduralModels
     const float BlueprintMass = 0.1f;
     const float CellsMass = 0.15f;
     const float KitMass = 8f;
+    const float PlankMass = 9f;
+    const float StoneMass = 16f;
 
     static readonly Color PlankColor = new Color(0.27f, 0.22f, 0.17f);
     static readonly Color OldPlankColor = new Color(0.25f, 0.2f, 0.15f);
@@ -167,6 +171,40 @@ public static class ProceduralModels
         return root;
     }
 
+    static PhysicsMaterial padSurface;
+
+    static GameObject FinishPad(GameObject root, Collider collider)
+    {
+        if (padSurface == null)
+            padSurface = new PhysicsMaterial("Pad") { staticFriction = 1.4f, dynamicFriction = 1.2f, frictionCombine = PhysicsMaterialCombine.Maximum };
+        collider.sharedMaterial = padSurface;
+        root.AddComponent<TractionPad>();
+        return root;
+    }
+
+    // Доска под колесо: длиннее колеса, чтобы машина успела на неё заехать.
+    public static GameObject CreatePlank(string name, Vector3 position, Quaternion rotation)
+    {
+        GameObject root = CreateItemRoot(name, position, rotation, PlankMass);
+        Part(root.transform, "PlankBoard", PrimitiveType.Cube, Vector3.zero, new Vector3(0.3f, 0.05f, 1.5f), Lit(new Color(0.3f, 0.22f, 0.13f), 0f, 0f, 0.08f, 7));
+        foreach (float z in new[] { -0.5f, 0.5f })
+            Part(root.transform, "PlankCleat", PrimitiveType.Cube, new Vector3(0f, 0.03f, z), new Vector3(0.28f, 0.03f, 0.05f), Lit(new Color(0.2f, 0.15f, 0.09f), 0f, 0f, 0.08f, 7));
+        var box = root.AddComponent<BoxCollider>();
+        box.size = new Vector3(0.3f, 0.08f, 1.5f);
+        return FinishPad(root, box);
+    }
+
+    public static GameObject CreateStone(string name, Vector3 position, Quaternion rotation)
+    {
+        GameObject root = CreateItemRoot(name, position, rotation, StoneMass);
+        Material rock = Lit(new Color(0.24f, 0.24f, 0.23f), 0f, 0f, 0.12f);
+        Part(root.transform, "StoneBody", PrimitiveType.Sphere, Vector3.zero, new Vector3(0.46f, 0.2f, 0.38f), rock);
+        Part(root.transform, "StoneChip", PrimitiveType.Sphere, new Vector3(0.1f, 0.04f, -0.07f), new Vector3(0.24f, 0.16f, 0.22f), rock);
+        var box = root.AddComponent<BoxCollider>();
+        box.size = new Vector3(0.46f, 0.18f, 0.38f);
+        return FinishPad(root, box);
+    }
+
     public static GameObject CreateCells(string name, Vector3 position, Quaternion rotation)
     {
         GameObject root = CreateItemRoot(name, position, rotation, CellsMass);
@@ -292,6 +330,10 @@ public static class ProceduralModels
             return CreateCells(name, position, rotation);
         if (name.StartsWith(LootPrefix + KitKind))
             return CreateKit(name, position, rotation);
+        if (name.StartsWith(LootPrefix + PlankKind))
+            return CreatePlank(name, position, rotation);
+        if (name.StartsWith(LootPrefix + StoneKind))
+            return CreateStone(name, position, rotation);
         return name.StartsWith(LootPrefix + BatteryKind)
             ? CreateBattery(name, position, rotation)
             : CreateJerrycan(name, position, rotation);

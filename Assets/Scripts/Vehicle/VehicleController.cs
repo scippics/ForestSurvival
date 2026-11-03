@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 // Полный привод: момент идёт на все колёса, поворот — только на передние.
@@ -18,8 +18,8 @@ public class VehicleController : MonoBehaviour
     const float OpposingSpeedThreshold = 0.5f;
     const float WakeTorque = 0.001f;
 
-    // Грязь отнимает скорость, но не обездвиживает: тяга на всех колёсах всегда больше сопротивления
-    // самой глубокой ямы, с запасом на подъём.
+    // Грязь отнимает скорость, а в глубокой яме засасывает вставшую машину: тяги мотора там уже не хватает.
+    // Выбираться надо раскачкой, толчками в багажник или подкладками под колёса.
     const float MudForwardStiffness = 0.6f;
     const float MudSidewaysStiffness = 0.5f;
     const float GripMargin = 0.9f;
@@ -28,6 +28,15 @@ public class VehicleController : MonoBehaviour
     const float RecoverHeight = 1.5f;
     const float MudResistanceBase = 4000f;
     const float MudResistancePerSpeed = 200f;
+    const float MudDamping = 0.25f;
+    const float StuckDepth = 0.55f;
+    const float StuckForce = 7000f;
+    const float SuctionPerSecond = 0.3f;
+    const float SuctionMoveLoss = 0.45f;
+    const float SuctionStopSpeed = 0.25f;
+    const float RockPerThrottleFlip = 0.22f;
+    const float PadForwardStiffness = 1.35f;
+    const float PadSidewaysStiffness = 1.2f;
     const float StiffnessEpsilon = 0.01f;
 
     public const float BaseTank = 45f;
@@ -52,6 +61,7 @@ public class VehicleController : MonoBehaviour
     public int WiperMode { get; set; }
     public bool HandbrakeOn { get; set; }
     public float CurrentMudDepth { get; private set; }
+    public float Suction { get; private set; }
     public bool IsOverturned => Vector3.Dot(transform.up, Vector3.up) < OverturnedUpDot;
     public PlayerSeat Driver { get; set; }
     public bool RemoteDriven { get; set; }
@@ -109,6 +119,7 @@ public class VehicleController : MonoBehaviour
     Vector3 fillerRest;
     Quaternion fillerRestRotation;
     float fillerAngle;
+    float lastThrottleSign;
 
     void Awake()
     {
@@ -210,14 +221,36 @@ public class VehicleController : MonoBehaviour
         {
             // Только сама земля: рампа или кузов чужой машины над дорогой грязью не считаются.
             float depth = 0f;
-            if (wheel.Collider.GetGroundHit(out WheelHit hit) && hit.collider.CompareTag(OptimizedForestGenerator.TerrainTag))
-                depth = OptimizedForestGenerator.MudDepth(hit.point.x, hit.point.z);
+            bool onPad = false;
+            if (wheel.Collider.GetGroundHit(out WheelHit hit))
+            {
+                if (hit.collider.CompareTag(OptimizedForestGenerator.TerrainTag))
+                {
+                    depth = OptimizedForestGenerator.MudDepth(hit.point.x, hit.point.z);
+                }
+                else if (hit.collider.attachedRigidbody != null && hit.collider.attachedRigidbody.TryGetComponent(out TractionPad pad))
+                {
+                    pad.Press();
+                    onPad = true;
+                }
+            }
             total += depth;
 
-            SetStiffness(wheel.Collider, Mathf.Lerp(1f, Mathf.Lerp(MudForwardStiffness, 1f, mudGrip), depth), Mathf.Lerp(1f, Mathf.Lerp(MudSidewaysStiffness, 1f, mudGrip), depth));
+            if (onPad)
+                SetStiffness(wheel.Collider, PadForwardStiffness, PadSidewaysStiffness);
+            else
+                SetStiffness(wheel.Collider, Mathf.Lerp(1f, Mathf.Lerp(MudForwardStiffness, 1f, mudGrip), depth), Mathf.Lerp(1f, Mathf.Lerp(MudSidewaysStiffness, 1f, mudGrip), depth));
         }
 
         CurrentMudDepth = wheels.Count > 0 ? total / wheels.Count : 0f;
+
+        // Чем больше людей в сессии, тем гуще грязь: вчетвером её и должны вытаскивать вчетвером.
+        float viscosity = WorldSync.MudViscosity;
+        float damping = CurrentMudDepth * MudDamping * viscosity * (1f - mudGrip);
+        if (!Mathf.Approximately(body.linearDamping, damping))
+            body.linearDamping = damping;
+
+        UpdateSuction();
         if (CurrentMudDepth <= 0f)
             return;
 
@@ -228,9 +261,35 @@ public class VehicleController : MonoBehaviour
         if (speed < 0.001f)
             return;
 
-        float resistance = CurrentMudDepth * (1f - mudGrip) * (MudResistanceBase + MudResistancePerSpeed * speed);
+        float stuck = Suction * StuckForce * Mathf.Lerp(0.5f, 1f, Mathf.InverseLerp(StuckDepth, 1f, CurrentMudDepth));
+        float resistance = viscosity * (1f - mudGrip) * (CurrentMudDepth * (MudResistanceBase + MudResistancePerSpeed * speed) + stuck);
         resistance = Mathf.Min(resistance, body.mass * speed / Time.fixedDeltaTime);
         body.AddForce(-velocity / speed * resistance, ForceMode.Force);
+    }
+
+    // Стоящую в глубокой грязи машину засасывает, а любое движение и смена направления газа её отпускают.
+    void UpdateSuction()
+    {
+        float sign = throttle > 0f ? 1f : throttle < 0f ? -1f : lastThrottleSign;
+        if (sign != lastThrottleSign)
+        {
+            if (lastThrottleSign != 0f && EngineRunning)
+                RockFree(RockPerThrottleFlip);
+            lastThrottleSign = sign;
+        }
+
+        float speed = body.linearVelocity.magnitude;
+        if (CurrentMudDepth < StuckDepth)
+            Suction = 0f;
+        else if (speed < SuctionStopSpeed)
+            Suction = Mathf.Min(1f, Suction + SuctionPerSecond * Time.fixedDeltaTime);
+        else
+            Suction = Mathf.Max(0f, Suction - speed * SuctionMoveLoss * Time.fixedDeltaTime);
+    }
+
+    public void RockFree(float amount)
+    {
+        Suction = Mathf.Max(0f, Suction - amount);
     }
 
     // Сорванное колесо теряет сцепление, поэтому на него идёт не больше момента, чем оно

@@ -9,6 +9,11 @@ using UnityEngine;
 public class WorldSync : NetworkBehaviour
 {
     public const ulong NoDriver = ulong.MaxValue;
+    const int MaxPlayers = 4;
+    const float ViscosityPerPlayer = 0.3f;
+
+    // Густота грязи по числу игроков в сессии, у всех одна. Без сети игрок один.
+    public static float MudViscosity => 1f + (Instance != null ? Mathf.Clamp(Instance.players.Value, 1, MaxPlayers) - 1 : 0) * ViscosityPerPlayer;
 
     const float CarSendPeriod = 0.05f;
     const float ItemSendPeriod = 0.066f;
@@ -38,6 +43,7 @@ public class WorldSync : NetworkBehaviour
     readonly NetworkVariable<bool> raining = new NetworkVariable<bool>();
     readonly NetworkVariable<int> storyStage = new NetworkVariable<int>();
     readonly NetworkVariable<bool> doorOpen = new NetworkVariable<bool>();
+    readonly NetworkVariable<int> players = new NetworkVariable<int>(1);
 
     readonly Dictionary<string, Rigidbody> items = new Dictionary<string, Rigidbody>();
     readonly Dictionary<string, FollowedItem> followed = new Dictionary<string, FollowedItem>();
@@ -189,6 +195,19 @@ public class WorldSync : NetworkBehaviour
             door.SetOpen(doorOpen.Value);
     }
 
+    public void AnnouncePush()
+    {
+        if (IsSpawned)
+            PushRpc();
+    }
+
+    [Rpc(SendTo.NotMe)]
+    void PushRpc()
+    {
+        if (SimulatesCar())
+            car.GetComponent<PushableVehicle>().ApplyPulse();
+    }
+
     public void AnnounceFuelAdded(float liters)
     {
         if (HasClients)
@@ -220,6 +239,9 @@ public class WorldSync : NetworkBehaviour
     {
         if (!IsSpawned)
             return;
+
+        if (IsServer)
+            players.Value = NetworkManager.ConnectedClientsIds.Count;
 
         UpdateCar();
         UpdateHeldItems();

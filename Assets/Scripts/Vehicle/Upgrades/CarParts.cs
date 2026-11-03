@@ -149,7 +149,7 @@ public static class CarPartModels
             case CarPartKind.WinchBumper:
                 Box(root, new Vector3(0f, -0.14f, 0f), new Vector3(1.86f, 0.22f, 0.18f), dark);
                 Box(root, new Vector3(0f, -0.04f, 0.04f), new Vector3(0.6f, 0.14f, 0.2f), steel);
-                ProceduralModels.Part(root, "Drum", PrimitiveType.Cylinder, new Vector3(0f, 0.08f, 0.04f), new Vector3(0.17f, 0.24f, 0.17f), M(DarkSteel * 2f, 0.4f, mounted), Quaternion.Euler(0f, 0f, 90f));
+                ProceduralModels.Part(root, "BumperBoss", PrimitiveType.Cylinder, new Vector3(0f, 0.08f, 0.04f), new Vector3(0.17f, 0.24f, 0.17f), M(DarkSteel * 2f, 0.4f, mounted), Quaternion.Euler(0f, 0f, 90f));
                 foreach (float s in new[] { -1f, 1f })
                 {
                     Box(root, new Vector3(s * 0.28f, 0.08f, 0.04f), new Vector3(0.03f, 0.22f, 0.2f), steel);

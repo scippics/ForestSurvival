@@ -116,6 +116,7 @@ public static class RuntimeBootstrapper
         zone.center = new Vector3(0f, 0f, -2.7f);
         zone.size = new Vector3(2f, 2.4f, 1.6f);
 
+        vehicle.AddComponent<CarLoad>();
         vehicle.AddComponent<CarUpgrades>();
         vehicle.AddComponent<WheelTracks>();
         vehicle.AddComponent<PushableVehicle>();

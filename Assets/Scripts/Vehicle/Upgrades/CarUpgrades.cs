@@ -284,7 +284,7 @@ public class CarUpgrades : MonoBehaviour
             burn += info.Burn;
             armor += info.Armor;
         }
-        body.mass = mass;
+        GetComponent<CarLoad>().SetBaseMass(mass);
         ArmorTotal = armor;
         car.ApplyUpgrades(torque, speed, grip, tank, burn);
     }
