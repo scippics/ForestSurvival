@@ -3,26 +3,35 @@ using UnityEngine;
 // Погода: дождь приходит и уходит сам. Значение Rain читают земля, стёкла, туман, дворники и звук.
 public class ForestWeather : MonoBehaviour
 {
-    const float ClearMinSeconds = 240f;
-    const float ClearMaxSeconds = 520f;
+    const float FirstRainMinSeconds = 50f;
+    const float FirstRainMaxSeconds = 110f;
+    const float ClearMinSeconds = 180f;
+    const float ClearMaxSeconds = 420f;
     const float RainMinSeconds = 100f;
     const float RainMaxSeconds = 240f;
-    const float RainFadeSeconds = 18f;
+    const float RainFadeSeconds = 12f;
     const float ClearFog = 0.042f;
     const float RainFog = 0.058f;
-    const float RainSunDim = 0.5f;
-    const float DropsPerSecond = 1300f;
+    const float RainSunDim = 0.6f;
+    const float DropsPerSecond = 3600f;
+    const float SplashesPerSecond = 1100f;
+    const float SplashRadius = 32f;
     const float EmitHeight = 8f;
+
+    // Струя у самой камеры не должна становиться толстой белой полосой на весь экран.
+    const float MaxDropScreenSize = 0.012f;
     const float ThunderMinRain = 0.6f;
 
     static readonly int RainId = Shader.PropertyToID("_ForestRain");
-    static readonly Color DropColor = new Color(0.72f, 0.78f, 0.85f, 0.32f);
+    static readonly Color DropColor = new Color(0.72f, 0.78f, 0.85f, 0.42f);
+    static readonly Color SplashColor = new Color(0.75f, 0.8f, 0.85f, 0.3f);
 
     public static float Rain { get; private set; }
 
     public bool IsRaining => raining;
 
     ParticleSystem drops;
+    ParticleSystem splashes;
     Light sun;
     bool raining;
     bool followsHost;
@@ -47,9 +56,42 @@ public class ForestWeather : MonoBehaviour
     void Start()
     {
         sun = FindAnyObjectByType<DayNightCycle>().GetComponent<Light>();
-        nextChange = Time.time + Random.Range(ClearMinSeconds, ClearMaxSeconds);
+        nextChange = Time.time + Random.Range(FirstRainMinSeconds, FirstRainMaxSeconds);
         nextThunder = Time.time + 20f;
         CreateDrops();
+        CreateSplashes();
+    }
+
+    // Брызги у самой земли: вблизи именно они показывают, что идёт дождь.
+    void CreateSplashes()
+    {
+        var splashObject = new GameObject("RainSplashes");
+        splashObject.transform.SetParent(transform, false);
+        splashObject.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+
+        splashes = splashObject.AddComponent<ParticleSystem>();
+        splashes.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        ParticleSystem.MainModule main = splashes.main;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 700;
+        main.playOnAwake = false;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.24f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.5f, 1.3f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.075f);
+        main.startColor = SplashColor;
+        main.gravityModifier = 0.5f;
+
+        ParticleSystem.ShapeModule shape = splashes.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(SplashRadius, SplashRadius, 0.1f);
+
+        ParticleSystem.EmissionModule emission = splashes.emission;
+        emission.rateOverTime = 0f;
+
+        var splashRenderer = splashObject.GetComponent<ParticleSystemRenderer>();
+        splashRenderer.sharedMaterial = ForestAtmosphere.CreateParticleMaterial(0.2f);
+        splashes.Play();
     }
 
     void CreateDrops()
@@ -63,11 +105,11 @@ public class ForestWeather : MonoBehaviour
 
         ParticleSystem.MainModule main = drops.main;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.maxParticles = 1800;
+        main.maxParticles = 4200;
         main.playOnAwake = false;
         main.startLifetime = 0.85f;
         main.startSpeed = 15f;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.012f, 0.022f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.016f, 0.03f);
         main.startColor = DropColor;
 
         ParticleSystem.ShapeModule shape = drops.shape;
@@ -82,7 +124,7 @@ public class ForestWeather : MonoBehaviour
         dropRenderer.lengthScale = 2f;
         dropRenderer.velocityScale = 0.035f;
         dropRenderer.sharedMaterial = ForestAtmosphere.CreateParticleMaterial(0.2f);
-        dropRenderer.maxParticleSize = 1f;
+        dropRenderer.maxParticleSize = MaxDropScreenSize;
 
         // Капли гаснут внутри кабины: крыша настоящая, и в машине дождя быть не должно.
         var car = FindAnyObjectByType<VehicleController>();
@@ -113,10 +155,17 @@ public class ForestWeather : MonoBehaviour
 
         Camera view = Camera.main;
         if (view != null)
-            drops.transform.position = view.transform.position + Vector3.up * EmitHeight;
+        {
+            Vector3 eye = view.transform.position;
+            drops.transform.position = eye + Vector3.up * EmitHeight;
+            splashes.transform.position = new Vector3(eye.x, OptimizedForestGenerator.TerrainHeight(eye.x, eye.z) + 0.04f, eye.z);
+        }
 
         ParticleSystem.EmissionModule emission = drops.emission;
         emission.rateOverTime = DropsPerSecond * Rain;
+
+        ParticleSystem.EmissionModule splashEmission = splashes.emission;
+        splashEmission.rateOverTime = SplashesPerSecond * Rain;
 
         if (Rain > ThunderMinRain && now > nextThunder)
         {

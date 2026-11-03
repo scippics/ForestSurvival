@@ -12,9 +12,15 @@ public class PlayerInputReader : MonoBehaviour
     public bool PushHeld { get; private set; }
     public bool InteractHeld { get; private set; }
 
+    // Выбор в разговоре: номер нажатой клавиши на этот кадр, 0 — ничего. Читают его в Update.
+    public int ChoicePressed { get; private set; }
+
+    const int MaxChoices = 5;
+
     InputActionMap map;
-    InputAction move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, recover, cancel;
-    bool grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, recoverLatched, skipLatched;
+    InputAction move, look, grab, throwItem, push, interact, space, notebook, flashlight, headlights, wipers, recover, cancel;
+    readonly InputAction[] choices = new InputAction[MaxChoices];
+    bool grabLatched, throwLatched, interactLatched, spaceLatched, notebookLatched, flashlightLatched, headlightsLatched, wipersLatched, recoverLatched, skipLatched;
 
     void Awake()
     {
@@ -36,8 +42,11 @@ public class PlayerInputReader : MonoBehaviour
         notebook = map.AddAction("Notebook", InputActionType.Button, "<Keyboard>/tab");
         flashlight = map.AddAction("Flashlight", InputActionType.Button, "<Keyboard>/t");
         headlights = map.AddAction("Headlights", InputActionType.Button, "<Keyboard>/l");
+        wipers = map.AddAction("Wipers", InputActionType.Button, "<Keyboard>/v");
         recover = map.AddAction("Recover", InputActionType.Button, "<Keyboard>/r");
         cancel = map.AddAction("Cancel", InputActionType.Button, "<Keyboard>/escape");
+        for (int i = 0; i < MaxChoices; i++)
+            choices[i] = map.AddAction("Choice" + (i + 1), InputActionType.Button, "<Keyboard>/" + (i + 1));
 
         map.Enable();
     }
@@ -55,6 +64,7 @@ public class PlayerInputReader : MonoBehaviour
         if (GameFlow.State == GameState.Cutscene)
             skipLatched |= cancel.WasPressedThisFrame() || space.WasPressedThisFrame();
 
+        ChoicePressed = 0;
         if (GameFlow.State != GameState.Playing)
         {
             Move = Vector2.zero;
@@ -71,6 +81,12 @@ public class PlayerInputReader : MonoBehaviour
         PushHeld = push.IsPressed();
         InteractHeld = interact.IsPressed();
 
+        for (int i = 0; i < MaxChoices; i++)
+        {
+            if (choices[i].WasPressedThisFrame())
+                ChoicePressed = i + 1;
+        }
+
         // Между кадрами может не быть ни одного шага физики, поэтому нажатия
         // запоминаются до тех пор, пока их не заберёт FixedUpdate.
         grabLatched |= grab.WasPressedThisFrame();
@@ -80,6 +96,7 @@ public class PlayerInputReader : MonoBehaviour
         notebookLatched |= notebook.WasPressedThisFrame();
         flashlightLatched |= flashlight.WasPressedThisFrame();
         headlightsLatched |= headlights.WasPressedThisFrame();
+        wipersLatched |= wipers.WasPressedThisFrame();
         recoverLatched |= recover.WasPressedThisFrame();
     }
 
@@ -116,6 +133,13 @@ public class PlayerInputReader : MonoBehaviour
     {
         bool pressed = headlightsLatched;
         headlightsLatched = false;
+        return pressed;
+    }
+
+    public bool ConsumeWipers()
+    {
+        bool pressed = wipersLatched;
+        wipersLatched = false;
         return pressed;
     }
 

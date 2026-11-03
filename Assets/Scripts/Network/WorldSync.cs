@@ -3,7 +3,7 @@ using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
-// Общий мир кооператива: машина, предметы в руках, время суток, дождь и задача пролога.
+// Общий мир кооператива: машина, предметы в руках, дверь дома, время суток, дождь и задача пролога.
 // Сами объекты строятся у всех одинаково из кода, поэтому сетевой здесь один этот объект.
 // Физику машины считает тот, кто за рулём, а пустую считает хост; остальные только следуют за ним.
 public class WorldSync : NetworkBehaviour
@@ -37,6 +37,7 @@ public class WorldSync : NetworkBehaviour
     readonly NetworkVariable<float> timeOfDay = new NetworkVariable<float>();
     readonly NetworkVariable<bool> raining = new NetworkVariable<bool>();
     readonly NetworkVariable<int> storyStage = new NetworkVariable<int>();
+    readonly NetworkVariable<bool> doorOpen = new NetworkVariable<bool>();
 
     readonly Dictionary<string, Rigidbody> items = new Dictionary<string, Rigidbody>();
     readonly Dictionary<string, FollowedItem> followed = new Dictionary<string, FollowedItem>();
@@ -47,6 +48,7 @@ public class WorldSync : NetworkBehaviour
     PlayerHands hands;
     DayNightCycle cycle;
     ForestWeather weather;
+    HouseDoor door;
 
     Vector3 carTarget;
     Quaternion carTargetRotation;
@@ -94,6 +96,26 @@ public class WorldSync : NetworkBehaviour
             driverId.Value = NoDriver;
     }
 
+    public void RequestDoor(bool open)
+    {
+        if (IsSpawned)
+            RequestDoorRpc(open);
+    }
+
+    [Rpc(SendTo.Server)]
+    void RequestDoorRpc(bool open)
+    {
+        doorOpen.Value = open;
+    }
+
+    void UpdateDoor()
+    {
+        if (door == null)
+            door = FindAnyObjectByType<HouseDoor>();
+        if (door != null && door.IsOpen != doorOpen.Value)
+            door.SetOpen(doorOpen.Value);
+    }
+
     public void AnnounceFuelAdded(float liters)
     {
         if (HasClients)
@@ -130,6 +152,7 @@ public class WorldSync : NetworkBehaviour
         UpdateHeldItems();
         UpdateFollowedItems();
         UpdateWorldState();
+        UpdateDoor();
     }
 
     void UpdateCar()
@@ -146,7 +169,7 @@ public class WorldSync : NetworkBehaviour
             if (HasClients && Time.unscaledTime >= nextCarSend)
             {
                 nextCarSend = Time.unscaledTime + CarSendPeriod;
-                CarStateRpc(carBody.position, carBody.rotation, carBody.linearVelocity, car.Throttle, car.SteerInput, car.FuelLiters, car.LightsOn, car.HandbrakeOn);
+                CarStateRpc(carBody.position, carBody.rotation, carBody.linearVelocity, car.Throttle, car.SteerInput, car.FuelLiters, car.LightsOn, car.HandbrakeOn, car.WiperMode);
             }
             return;
         }
@@ -170,7 +193,7 @@ public class WorldSync : NetworkBehaviour
     }
 
     [Rpc(SendTo.NotMe, Delivery = RpcDelivery.Unreliable)]
-    void CarStateRpc(Vector3 position, Quaternion rotation, Vector3 velocity, float throttle, float steer, float fuel, bool lights, bool handbrake)
+    void CarStateRpc(Vector3 position, Quaternion rotation, Vector3 velocity, float throttle, float steer, float fuel, bool lights, bool handbrake, int wipers)
     {
         if (SimulatesCar())
             return;
@@ -182,6 +205,7 @@ public class WorldSync : NetworkBehaviour
         car.SetDriverInput(new Vector2(steer, throttle));
         car.SetFuel(fuel);
         car.HandbrakeOn = handbrake;
+        car.WiperMode = wipers;
         if (car.LightsOn != lights)
             car.SetLights(lights);
     }

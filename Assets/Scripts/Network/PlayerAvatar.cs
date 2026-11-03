@@ -8,6 +8,9 @@ public class PlayerAvatar : NetworkBehaviour
 {
     const float LookSendThreshold = 0.5f;
     const float LookSmoothing = 12f;
+    const float FaceSmoothing = 4f;
+    const float MaxFacePitch = 25f;
+    const int NpcLayer = 0;
 
     readonly NetworkVariable<Vector2> look = new NetworkVariable<Vector2>(
         Vector2.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
@@ -18,6 +21,9 @@ public class PlayerAvatar : NetworkBehaviour
     // Бот принадлежит серверу, как и хост: отличить своего игрока можно только вместе с IsPlayerObject.
     public bool IsLocal => IsOwner && NetworkObject.IsPlayerObject;
     public bool IsSeatedNetwork => seated.Value;
+
+    // Кузьмич поворачивается к тому, кто подошёл. У каждого на экране к нему самому.
+    public Transform FaceTarget { get; set; }
 
     Transform bodyPivot;
     Transform headPivot;
@@ -44,6 +50,13 @@ public class PlayerAvatar : NetworkBehaviour
         {
             // Чужое тело двигается по сети: физика только мешала бы этому.
             body.isKinematic = true;
+
+            // Луч взгляда проходит сквозь игроков, а с Кузьмичом можно заговорить.
+            if (!NetworkObject.IsPlayerObject)
+            {
+                gameObject.layer = NpcLayer;
+                gameObject.AddComponent<NpcTalk>();
+            }
             return;
         }
 
@@ -74,15 +87,24 @@ public class PlayerAvatar : NetworkBehaviour
             capsule.enabled = !seated.Value;
         }
 
-        float blend = 1f - Mathf.Exp(-LookSmoothing * Time.deltaTime);
-        shownYaw = Mathf.LerpAngle(shownYaw, look.Value.x, blend);
-        shownPitch = Mathf.Lerp(shownPitch, look.Value.y, blend);
+        Vector2 target = look.Value;
+        float smoothing = LookSmoothing;
+        if (FaceTarget != null)
+        {
+            Vector3 toTarget = (FaceTarget.position - headPivot.position).normalized;
+            target = new Vector2(Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg, Mathf.Clamp(-Mathf.Asin(toTarget.y) * Mathf.Rad2Deg, -MaxFacePitch, MaxFacePitch));
+            smoothing = FaceSmoothing;
+        }
+
+        float blend = 1f - Mathf.Exp(-smoothing * Time.deltaTime);
+        shownYaw = Mathf.LerpAngle(shownYaw, target.x, blend);
+        shownPitch = Mathf.Lerp(shownPitch, target.y, blend);
 
         bodyPivot.rotation = Quaternion.Euler(0f, shownYaw, 0f);
         headPivot.localRotation = Quaternion.Euler(shownPitch, 0f, 0f);
     }
 
-    // Бота никто не ведёт, поэтому взгляд задаёт сервер как его владелец.
+    // Кузьмича никто не ведёт, поэтому взгляд задаёт сервер как его владелец.
     public void SetBotPose(float yaw)
     {
         look.Value = new Vector2(yaw, 0f);

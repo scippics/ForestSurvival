@@ -41,7 +41,20 @@ public static class InteractionRay
             return true;
         return hit.collider.CompareTag(FuelSourceTag)
                || IsFuelTransfer(heldSiphon, hit)
-               || IsFreeVehicle(hit, out _);
+               || IsFreeVehicle(hit, out _)
+               || (!handsFull && (IsDoor(hit, out _) || IsNpc(hit, out _)));
+    }
+
+    public static bool IsDoor(RaycastHit hit, out HouseDoor door)
+    {
+        door = null;
+        return hit.rigidbody != null && hit.rigidbody.TryGetComponent(out door);
+    }
+
+    public static bool IsNpc(RaycastHit hit, out NpcTalk npc)
+    {
+        npc = null;
+        return hit.rigidbody != null && hit.rigidbody.TryGetComponent(out npc);
     }
 
     public static bool IsFreeVehicle(RaycastHit hit, out VehicleController vehicle)

@@ -14,21 +14,24 @@ public static class CharacterModel
 
     const int SurfaceQuilt = 8;
     const int SurfaceCloth = 9;
+    const int LatheSides = 24;
 
     public static readonly Color JacketKey = new Color(0.62f, 0.3f, 0.07f);
+    public static readonly Color WornJacket = new Color(0.27f, 0.25f, 0.17f);
 
-    static readonly Color SkinColor = new Color(0.5f, 0.36f, 0.28f);
-    static readonly Color TrousersColor = new Color(0.1f, 0.115f, 0.09f);
-    static readonly Color BootColor = new Color(0.025f, 0.028f, 0.025f);
+    static readonly Color SkinColor = new Color(0.62f, 0.44f, 0.34f);
+    static readonly Color LipColor = new Color(0.42f, 0.2f, 0.17f);
+    static readonly Color TrousersColor = new Color(0.17f, 0.19f, 0.14f);
+    static readonly Color BootColor = new Color(0.035f, 0.038f, 0.034f);
     static readonly Color SoleColor = new Color(0.012f, 0.012f, 0.012f);
-    static readonly Color FurColor = new Color(0.13f, 0.1f, 0.075f);
-    static readonly Color HatColor = new Color(0.1f, 0.11f, 0.085f);
-    static readonly Color GloveColor = new Color(0.16f, 0.12f, 0.08f);
-    static readonly Color BeltColor = new Color(0.05f, 0.035f, 0.022f);
+    static readonly Color FurColor = new Color(0.3f, 0.23f, 0.16f);
+    static readonly Color HatColor = new Color(0.15f, 0.16f, 0.12f);
+    static readonly Color GloveColor = new Color(0.22f, 0.17f, 0.11f);
+    static readonly Color BeltColor = new Color(0.08f, 0.055f, 0.035f);
     static readonly Color BuckleColor = new Color(0.4f, 0.36f, 0.26f);
-    static readonly Color CanvasColor = new Color(0.17f, 0.17f, 0.11f);
+    static readonly Color CanvasColor = new Color(0.3f, 0.29f, 0.19f);
     static readonly Color BlanketColor = new Color(0.14f, 0.1f, 0.08f);
-    static readonly Color BeardColor = new Color(0.1f, 0.075f, 0.055f);
+    static readonly Color BeardColor = new Color(0.2f, 0.15f, 0.11f);
     static readonly Color EyeWhite = new Color(0.62f, 0.6f, 0.56f);
     static readonly Color EyeDark = new Color(0.02f, 0.02f, 0.025f);
 
@@ -38,10 +41,23 @@ public static class CharacterModel
     {
         if (!Meshes.TryGetValue(name, out Mesh mesh))
         {
-            mesh = ForestMeshes.BuildLathe(name, profile, 14, xScale, zScale);
+            mesh = ForestMeshes.BuildLathe(name, Rounded(Rounded(profile)), LatheSides, xScale, zScale);
             Meshes[name] = mesh;
         }
         return mesh;
+    }
+
+    // Срезание углов: иначе плечи и локти из нескольких точек выглядят рублеными.
+    static Vector2[] Rounded(Vector2[] profile)
+    {
+        var points = new List<Vector2> { profile[0] };
+        for (int i = 0; i < profile.Length - 1; i++)
+        {
+            points.Add(Vector2.Lerp(profile[i], profile[i + 1], 0.25f));
+            points.Add(Vector2.Lerp(profile[i], profile[i + 1], 0.75f));
+        }
+        points.Add(profile[profile.Length - 1]);
+        return points.ToArray();
     }
 
     static Transform Pivot(Transform parent, string name, Vector3 position)
@@ -119,14 +135,16 @@ public static class CharacterModel
 
         foreach (float side in new[] { -1f, 1f })
         {
-            ProceduralModels.Part(body, "Pocket", PrimitiveType.Cube, new Vector3(side * 0.12f, -0.11f, 0.135f), new Vector3(0.1f, 0.1f, 0.018f), Cloth(CanvasColor * 0.7f), Quaternion.Euler(3f, side * 16f, 0f));
-            ProceduralModels.Part(body, "PocketFlap", PrimitiveType.Cube, new Vector3(side * 0.12f, -0.055f, 0.146f), new Vector3(0.11f, 0.03f, 0.016f), dark, Quaternion.Euler(3f, side * 16f, 0f));
-            ProceduralModels.Part(body, "ChestPocket", PrimitiveType.Cube, new Vector3(side * 0.1f, 0.28f, 0.145f), new Vector3(0.085f, 0.075f, 0.012f), Cloth(CanvasColor * 0.7f), Quaternion.Euler(-4f, side * 12f, 0f));
+            Material pocket = Cloth(CanvasColor * 0.8f);
+            ProceduralModels.Part(body, "Pocket", PrimitiveType.Cube, new Vector3(side * 0.12f, -0.115f, 0.123f), new Vector3(0.1f, 0.095f, 0.014f), pocket, Quaternion.Euler(3f, side * 30f, 0f));
+            ProceduralModels.Part(body, "PocketFlap", PrimitiveType.Cube, new Vector3(side * 0.12f, -0.065f, 0.13f), new Vector3(0.108f, 0.028f, 0.014f), Cloth(CanvasColor * 0.6f), Quaternion.Euler(3f, side * 30f, 0f));
+            ProceduralModels.Part(body, "ChestPocket", PrimitiveType.Cube, new Vector3(side * 0.07f, 0.27f, 0.152f), new Vector3(0.07f, 0.062f, 0.01f), pocket, Quaternion.Euler(-4f, side * 8f, 0f));
 
-            // Лямки рюкзака идут через плечи к поясу.
-            Material strap = Cloth(CanvasColor * 0.6f);
-            ProceduralModels.Part(body, "Strap", PrimitiveType.Cube, new Vector3(side * 0.13f, 0.3f, 0.145f), new Vector3(0.042f, 0.34f, 0.012f), strap, Quaternion.Euler(-4f, side * 14f, side * -5f));
-            ProceduralModels.Part(body, "StrapTop", PrimitiveType.Cube, new Vector3(side * 0.14f, 0.455f, 0f), new Vector3(0.042f, 0.012f, 0.3f), strap, Quaternion.Euler(0f, 0f, side * -24f));
+            // Лямки рюкзака идут по груди через плечи, поверх выпуклого ватника.
+            Material strap = Cloth(CanvasColor * 0.62f);
+            ProceduralModels.Part(body, "Strap", PrimitiveType.Cube, new Vector3(side * 0.165f, 0.27f, 0.122f), new Vector3(0.038f, 0.3f, 0.01f), strap, Quaternion.Euler(-5f, side * 32f, side * -4f));
+            ProceduralModels.Part(body, "StrapBuckle", PrimitiveType.Cube, new Vector3(side * 0.169f, 0.2f, 0.122f), new Vector3(0.044f, 0.018f, 0.012f), ProceduralModels.Lit(BuckleColor, 0f, 0f, 0.5f), Quaternion.Euler(-5f, side * 32f, 0f));
+            ProceduralModels.Part(body, "StrapTop", PrimitiveType.Cube, new Vector3(side * 0.15f, 0.455f, 0f), new Vector3(0.038f, 0.012f, 0.25f), strap, Quaternion.Euler(0f, 0f, side * -28f));
         }
     }
 
@@ -155,13 +173,17 @@ public static class CharacterModel
 
         ProceduralModels.Part(head, "Skull", PrimitiveType.Sphere, new Vector3(0f, 0.13f, 0.005f), new Vector3(0.205f, 0.25f, 0.225f), skin);
         ProceduralModels.Part(head, "Jaw", PrimitiveType.Sphere, new Vector3(0f, 0.065f, 0.025f), new Vector3(0.165f, 0.13f, 0.17f), skin);
-        ProceduralModels.Part(head, "Beard", PrimitiveType.Sphere, new Vector3(0f, 0.05f, 0.045f), new Vector3(0.17f, 0.125f, 0.16f), beard);
-        ProceduralModels.Part(head, "Moustache", PrimitiveType.Cube, new Vector3(0f, 0.102f, 0.108f), new Vector3(0.07f, 0.014f, 0.022f), beard);
-        ProceduralModels.Part(head, "Nose", PrimitiveType.Sphere, new Vector3(0f, 0.135f, 0.126f), new Vector3(0.036f, 0.056f, 0.05f), skin);
-        ProceduralModels.Part(head, "Brow", PrimitiveType.Cube, new Vector3(0f, 0.178f, 0.102f), new Vector3(0.135f, 0.018f, 0.025f), beard);
+        ProceduralModels.Part(head, "Beard", PrimitiveType.Sphere, new Vector3(0f, 0.042f, 0.05f), new Vector3(0.168f, 0.135f, 0.15f), beard);
+        ProceduralModels.Part(head, "BeardChin", PrimitiveType.Sphere, new Vector3(0f, 0.004f, 0.078f), new Vector3(0.09f, 0.085f, 0.085f), beard);
+        ProceduralModels.Part(head, "Lip", PrimitiveType.Sphere, new Vector3(0f, 0.082f, 0.104f), new Vector3(0.036f, 0.012f, 0.016f), ProceduralModels.Lit(LipColor));
+        ProceduralModels.Part(head, "Nose", PrimitiveType.Sphere, new Vector3(0f, 0.135f, 0.122f), new Vector3(0.034f, 0.058f, 0.05f), skin);
+        ProceduralModels.Part(head, "NoseTip", PrimitiveType.Sphere, new Vector3(0f, 0.116f, 0.134f), new Vector3(0.036f, 0.028f, 0.03f), skin);
 
         foreach (float side in new[] { -1f, 1f })
         {
+            ProceduralModels.Part(head, "Moustache", PrimitiveType.Sphere, new Vector3(side * 0.024f, 0.099f, 0.108f), new Vector3(0.052f, 0.018f, 0.024f), beard, Quaternion.Euler(0f, 0f, side * -16f));
+            ProceduralModels.Part(head, "Brow", PrimitiveType.Sphere, new Vector3(side * 0.043f, 0.176f, 0.1f), new Vector3(0.058f, 0.015f, 0.022f), beard, Quaternion.Euler(0f, 0f, side * 9f));
+            ProceduralModels.Part(head, "Cheek", PrimitiveType.Sphere, new Vector3(side * 0.058f, 0.118f, 0.078f), new Vector3(0.05f, 0.045f, 0.045f), skin);
             ProceduralModels.Part(head, "EyeWhite", PrimitiveType.Sphere, new Vector3(side * 0.041f, 0.152f, 0.098f), new Vector3(0.03f, 0.018f, 0.018f), ProceduralModels.Lit(EyeWhite, 0f, 0f, 0.6f));
             ProceduralModels.Part(head, "Eye", PrimitiveType.Sphere, new Vector3(side * 0.041f, 0.152f, 0.106f), new Vector3(0.014f, 0.014f, 0.008f), ProceduralModels.Lit(EyeDark, 0f, 0f, 0.8f));
         }
@@ -198,10 +220,10 @@ public static class CharacterModel
 
     static void BuildArm(Transform body, float side, Material jacket)
     {
-        Transform shoulder = Pivot(body, side < 0f ? ShoulderLeft : ShoulderRight, new Vector3(side * 0.255f, 0.385f, 0f));
+        Transform shoulder = Pivot(body, side < 0f ? ShoulderLeft : ShoulderRight, new Vector3(side * 0.232f, 0.385f, 0f));
         Mesh upper = Lathe("UpperArm", new[]
         {
-            new Vector2(-0.3f, 0f), new Vector2(-0.3f, 0.066f), new Vector2(-0.14f, 0.074f), new Vector2(-0.02f, 0.088f), new Vector2(0.05f, 0.07f), new Vector2(0.07f, 0f)
+            new Vector2(-0.3f, 0f), new Vector2(-0.3f, 0.062f), new Vector2(-0.14f, 0.068f), new Vector2(-0.02f, 0.076f), new Vector2(0.05f, 0.07f), new Vector2(0.085f, 0f)
         });
         ProceduralModels.MeshPart(shoulder, "UpperArm", upper, Vector3.zero, Vector3.one, jacket);
 

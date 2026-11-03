@@ -11,6 +11,8 @@ public class StoryUI : MonoBehaviour
     const float SubtitleSecondsPerChar = 0.065f;
     const float SubtitleMinSeconds = 3f;
 
+    static readonly Vector2 DialogueSize = new Vector2(1200f, 370f);
+
     static readonly Color CardColor = new Color(0.82f, 0.82f, 0.78f);
     static readonly Color TitleColor = new Color(0.9f, 0.88f, 0.82f);
     static readonly Color AccentColor = new Color(0.86f, 0.62f, 0.32f);
@@ -22,6 +24,8 @@ public class StoryUI : MonoBehaviour
 
     public bool NoteOpen => paper.activeSelf;
     public bool NotebookOpen => notebook.activeSelf;
+    public bool DialogueOpen => dialogue.activeSelf;
+    public string DialogueLine => dialogueText.text;
     public string Goal { get; private set; } = "";
     public string CurrentSubtitle => subtitle.text;
 
@@ -36,8 +40,10 @@ public class StoryUI : MonoBehaviour
     Text skipHint;
     Text noteText;
     Text notebookText;
+    Text dialogueText;
     GameObject paper;
     GameObject notebook;
+    GameObject dialogue;
     float subtitleUntil;
     float subtitleStart;
 
@@ -77,6 +83,14 @@ public class StoryUI : MonoBehaviour
         notebookText.GetComponent<Shadow>().enabled = false;
         Place(notebookText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(14f, 0f), new Vector2(720f, 540f));
         notebook.SetActive(false);
+
+        dialogue = AddPanel(root, "Dialogue", new Color(0f, 0f, 0f, 0.72f), DialogueSize);
+        Place(dialogue.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0f, DialogueSize.y * 0.5f + 40f), DialogueSize);
+        dialogueText = AddText(dialogue.transform, "DialogueText", 27, CardColor, FontStyle.Normal);
+        dialogueText.alignment = TextAnchor.UpperLeft;
+        dialogueText.supportRichText = true;
+        Place(dialogueText.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, DialogueSize - new Vector2(60f, 40f));
+        dialogue.SetActive(false);
 
         black = AddImage(root, "Black", Color.black);
         Stretch(black.rectTransform);
@@ -175,6 +189,22 @@ public class StoryUI : MonoBehaviour
     public void CloseNote()
     {
         paper.SetActive(false);
+    }
+
+    public void ShowDialogue(string speaker, string line, IReadOnlyList<string> options)
+    {
+        var text = new StringBuilder();
+        text.Append("<color=#DB9E52><b>").Append(speaker).Append("</b></color>\n").Append(line).Append("\n\n");
+        for (int i = 0; i < options.Count; i++)
+            text.Append("<b>").Append(i + 1).Append("</b>  ").Append(options[i]).Append('\n');
+
+        dialogueText.text = text.ToString();
+        dialogue.SetActive(true);
+    }
+
+    public void HideDialogue()
+    {
+        dialogue.SetActive(false);
     }
 
     public void ToggleNotebook(IReadOnlyList<string> recipes)

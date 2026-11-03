@@ -9,13 +9,19 @@ public class InteractionUI : MonoBehaviour
     const string PromptTransfer = "Зажать ЛКМ - Перелить топливо";
     const string PromptHolding = "ЛКМ - Отпустить, ПКМ - Бросить";
     const string PromptRead = "ЛКМ - Читать";
+    const string PromptDoorOpen = "ЛКМ - Открыть дверь";
+    const string PromptDoorClose = "ЛКМ - Закрыть дверь";
+    const string PromptTalk = "ЛКМ - Поговорить";
     const string PromptCloseNote = "ЛКМ - Убрать записку";
     const string PromptPour = "Зажать E - Залить в бак: ";
     const string PromptNoFuel = "Бак пуст: мотор не заведётся\n";
     const string PromptPressure = "Отпустить на 75-95. Давление: ";
     const string PromptEnter = "E - Сесть за руль";
-    const string PromptDriving = "E - Выйти, L - Фары, Пробел - Ручник: ";
+    const string PromptDriving = "E - Выйти, L - Фары, V - Дворники: ";
+    const string PromptHandbrake = ", Пробел - Ручник: ";
     const string PromptOverturned = "Машина перевернулась! R - Поставить на колёса\n";
+
+    static readonly string[] WiperNames = { "выкл", "редко", "часто" };
 
     const int ReferenceHeight = 1080;
     const float PromptOffset = 24f;
@@ -116,7 +122,7 @@ public class InteractionUI : MonoBehaviour
     {
         if (seat.IsSeated)
         {
-            string driving = PromptDriving + (seat.Vehicle.HandbrakeOn ? "вкл" : "выкл");
+            string driving = PromptDriving + WiperNames[seat.Vehicle.WiperMode] + PromptHandbrake + (seat.Vehicle.HandbrakeOn ? "вкл" : "выкл");
             if (seat.Vehicle.FuelLiters <= 0f)
                 driving = PromptNoFuel + driving;
             return seat.Vehicle.IsOverturned ? PromptOverturned + driving : driving;
@@ -124,6 +130,10 @@ public class InteractionUI : MonoBehaviour
 
         if (StoryUI.Instance.NoteOpen)
             return PromptCloseNote;
+
+        // Варианты ответа уже на экране, а ЛКМ просто заканчивает разговор.
+        if (NpcTalk.Current != null)
+            return "";
 
         if (hands.HeldSiphon != null && hands.HeldSiphon.IsPumping)
             return PromptPressure + Mathf.FloorToInt(hands.HeldSiphon.SiphonPressure);
@@ -146,6 +156,10 @@ public class InteractionUI : MonoBehaviour
                     return PromptRead;
                 return hit.rigidbody.TryGetComponent(out FuelCan aimedCan) ? PromptTake + CanLiters(aimedCan) : PromptTake;
             }
+            if (hands.Held == null && InteractionRay.IsNpc(hit, out _))
+                return PromptTalk;
+            if (hands.Held == null && InteractionRay.IsDoor(hit, out HouseDoor door))
+                return door.IsOpen ? PromptDoorClose : PromptDoorOpen;
             if (InteractionRay.IsFuelTransfer(hands.HeldSiphon, hit))
                 return PromptTransfer;
             if (InteractionRay.IsFreeVehicle(hit, out _))

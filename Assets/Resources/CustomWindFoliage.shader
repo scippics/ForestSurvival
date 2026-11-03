@@ -83,6 +83,8 @@ Shader "Forest/CustomWindFoliage"
             o.treeOrigin = origin.xz;
         }
 
+        float _ForestRain;
+
         void surf(Input IN, inout SurfaceOutputStandard o)
         {
             float3 albedo = UNITY_ACCESS_INSTANCED_PROP(FoliageProps, _Color).rgb;
@@ -112,9 +114,9 @@ Shader "Forest/CustomWindFoliage"
                 // Хвоя идёт от ствола наружу, поэтому полосы расходятся лучами вокруг дерева.
                 float2 fromAxis = world.xz - IN.treeOrigin;
                 float2 around = fromAxis / max(length(fromAxis), 0.05);
-                float rays = tex2D(_ForestNoise, float2((around.x * 1.3 + around.y * 0.9) * 1.9 + IN.variation, world.y * 0.045)).a;
-                float streak = tex2D(_ForestNoise, world.xz * 1.6 + world.y * 0.9).b;
-                albedo *= (0.5 + 1.0 * rays) * (0.85 + 0.3 * streak);
+                float rays = tex2D(_ForestNoise, float2((around.x * 1.3 + around.y * 0.9) * 5.5 + IN.variation, world.y * 0.09)).a;
+                float streak = tex2D(_ForestNoise, world.xz * 2.4 + world.y * 1.3).b;
+                albedo *= (0.72 + 0.56 * rays) * (0.8 + 0.4 * streak);
 
                 // Нижняя сторона лап темнее верхней: свет приходит сверху.
                 albedo *= lerp(0.55, 1.0, saturate(IN.worldNormal.y * 0.8 + 0.55));
@@ -138,9 +140,12 @@ Shader "Forest/CustomWindFoliage"
             }
 
             albedo *= lerp(0.45, 1.0, occlusion);
+
+            // Мокрая хвоя и кора темнеют и начинают блестеть.
+            albedo *= lerp(1.0, 0.7, _ForestRain);
             o.Albedo = albedo;
             o.Occlusion = occlusion;
-            o.Smoothness = _Smoothness;
+            o.Smoothness = _Smoothness + _ForestRain * 0.28;
 
             // Просвет кончиков хвои и травы, когда смотришь против солнца.
             float backlight = pow(saturate(dot(-normalize(IN.viewDir), _ForestSunDirection)), 3.0) * max(tip, _Grass * 0.3);

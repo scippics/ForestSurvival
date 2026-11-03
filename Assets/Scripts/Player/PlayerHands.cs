@@ -75,11 +75,21 @@ public class PlayerHands : MonoBehaviour
             return;
         }
 
+        if (NpcTalk.Current != null)
+        {
+            NpcTalk.Current.Close();
+            return;
+        }
+
         bool aimed = InteractionRay.Cast(view, out RaycastHit hit);
         if (Held == null)
         {
             if (aimed && InteractionRay.IsPickupable(hit))
                 Grab(hit.rigidbody);
+            else if (aimed && InteractionRay.IsDoor(hit, out HouseDoor door))
+                door.Toggle();
+            else if (aimed && InteractionRay.IsNpc(hit, out NpcTalk npc))
+                npc.Open(input, transform);
         }
         else if (aimed && InteractionRay.IsFuelTransfer(HeldSiphon, hit))
         {

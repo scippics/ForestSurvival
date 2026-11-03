@@ -1,6 +1,69 @@
+using System.Collections.Generic;
+
 // Весь текст пролога в одном месте.
 public static class StoryText
 {
+    public struct Topic
+    {
+        public string Question;
+        public string Answer;
+
+        public Topic(string question, string answer)
+        {
+            Question = question;
+            Answer = answer;
+        }
+    }
+
+    public const string NpcName = "Кузьмич";
+    public const string NpcLeave = "Ладно, пойду.";
+    public const string NpcBye = "Иди. Дотемна управься.";
+
+    public static string NpcGreeting(StoryStage stage)
+    {
+        switch (stage)
+        {
+            case StoryStage.PourFuel: return "Нашёл, значит. Лей, не стой.";
+            case StoryStage.DriveNorth:
+            case StoryStage.Free: return "Ты ещё тут? Светло пока, ехал бы.";
+            default: return "Гляди-ка, живой человек. На машине приехал, а заглох у самых ворот. Я слышал.";
+        }
+    }
+
+    public static void NpcTopics(StoryStage stage, List<Topic> topics)
+    {
+        topics.Clear();
+        topics.Add(new Topic("Ты кто такой?",
+            "Кузьмич я. Лес валил на сороковом, пока участок не закрыли. К Савельеву за солью пришёл, третий день жду."));
+
+        if (stage <= StoryStage.FindFuel)
+            topics.Add(new Topic("Где Савельев?",
+                "В доме его нет. Лампа горит, а на столе бумага лежит. Я читать не стал, не мне писано. Сходи глянь."));
+        else if (stage < StoryStage.Free)
+            topics.Add(new Topic("Савельев на стоянку ушёл?",
+                "Раз написал, значит, ушёл. Только пса с собой не взял, а пёс за ним везде ходил. Теперь и пса нет."));
+        else
+            topics.Add(new Topic("Савельев ушёл к реке.",
+                "К реке, значит. Сколько тут живу, с реки ещё никто не возвращался той же дорогой."));
+
+        if (stage < StoryStage.PourFuel)
+            topics.Add(new Topic("Бензин тут есть?",
+                "Под навесом бочки, там же шланг и канистра. Шланг возьми, наведи на канистру и качай. Отпусти вовремя, а то захлебнётся."));
+        else if (stage == StoryStage.PourFuel)
+            topics.Add(new Topic("Куда лить?",
+                "Неси к машине, смотри на неё и держи E. Канистра тяжёлая, так что не беги."));
+        else
+            topics.Add(new Topic("Куда теперь ехать?",
+                "На север, по просеке. Там старая стоянка лесорубов, наша. Заночевать там можно, если совсем прижмёт."));
+
+        topics.Add(new Topic("Что тут ночью ходит?",
+            "Стоит в тумане и смотрит. Подойдёшь, а его нет. Я потому и в дом не захожу: из окна двора не видно. Лучше тут, у дров."));
+
+        if (stage >= StoryStage.DriveNorth)
+            topics.Add(new Topic("Поехали со мной.",
+                "Нет, я своё отъездил. Кто-то должен тут быть, если Савельев вернётся."));
+    }
+
     public static readonly string[] IntroCards =
     {
         "Октябрь. Северный лесхоз, квадрат 41.",

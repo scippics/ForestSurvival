@@ -35,7 +35,13 @@ public class VehicleController : MonoBehaviour
     const float ThrottleBurn = 0.03f;
     const float LowFuelFraction = 0.15f;
 
+    public const int WipersOff = 0;
+    public const int WipersSlow = 1;
+    public const int WipersFast = 2;
+    const int WiperModeCount = 3;
+
     public bool LightsOn { get; private set; }
+    public int WiperMode { get; set; }
     public bool HandbrakeOn { get; set; }
     public float CurrentMudDepth { get; private set; }
     public bool IsOverturned => Vector3.Dot(transform.up, Vector3.up) < OverturnedUpDot;
@@ -105,6 +111,11 @@ public class VehicleController : MonoBehaviour
     public void AddLamp(Renderer lampRenderer, Color emission)
     {
         lamps.Add(new Lamp { Material = lampRenderer.sharedMaterial, Emission = emission });
+    }
+
+    public void CycleWipers()
+    {
+        WiperMode = (WiperMode + 1) % WiperModeCount;
     }
 
     public void SetLights(bool on)

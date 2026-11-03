@@ -79,6 +79,13 @@ public class PlayerSeat : MonoBehaviour
             ForestAudio.Play(ForestSound.Ratchet, 0.6f);
         }
 
+        bool wipersPressed = Input.ConsumeWipers();
+        if (IsSeated && wipersPressed)
+        {
+            Vehicle.CycleWipers();
+            ForestAudio.Play(ForestSound.Click, 0.5f);
+        }
+
         bool headlightsPressed = Input.ConsumeHeadlights();
         if (IsSeated && headlightsPressed)
         {

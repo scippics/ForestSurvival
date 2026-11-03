@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 // Лесной кордон на стартовой поляне: дом лесника, навес с бочками, дровяник, шлагбаум.
 // Всё стоит на плоской поляне, а привязка идёт к просеке: дорога ложится от шума, и дом всегда у неё.
@@ -17,6 +17,7 @@ public static class Kordon
     const float FloorHeight = 0.12f;
     const float DoorHalf = 0.5f;
     const float DoorHeight = 2f;
+    const float DoorAjar = -24f;
     const float TableHeight = 0.78f;
     const float ShedZ = -8f;
     const float ShedOffset = 8.5f;
@@ -179,7 +180,7 @@ public static class Kordon
 
         BuildRoof(house);
         BuildWindow(house, (windowLeft + windowRight) * 0.5f, (sill + top) * 0.5f, windowRight - windowLeft, top - sill, out Material glass);
-        BuildDoor(house);
+        HouseDoor door = BuildDoor(house);
 
         // Пол и пологий порог: ступень капсула игрока не перешагнула бы.
         Box(house, "Floor", new Vector3(0f, FloorHeight * 0.5f, 0f), new Vector3(HalfWidth * 2f, FloorHeight, HalfDepth * 2f), Wood(PlankColor));
@@ -188,6 +189,7 @@ public static class Kordon
         Box(house, "Porch", new Vector3(0f, 0.08f, -HalfDepth - 0.72f), new Vector3(1.6f, 0.06f, 1.2f), Wood(PlankColor), Quaternion.Euler(-4f, 0f, 0f));
 
         BuildFurniture(house, glass);
+        door.IgnoreWalls(house);
     }
 
     static void BuildRoof(Transform house)
@@ -245,8 +247,8 @@ public static class Kordon
             Box(house, "Curtain", new Vector3(x + side * (width * 0.5f - 0.16f), y, z + 0.09f), new Vector3(0.3f, height + 0.08f, 0.03f), ProceduralModels.Lit(new Color(0.17f, 0.1f, 0.07f), 0f, 0f, 0f, SurfaceCloth), null, false);
     }
 
-    // Настоящая дверь на петле: приоткрыта, и её можно толкнуть плечом.
-    static void BuildDoor(Transform house)
+    // Настоящая дверь на петле: приоткрыта, её можно толкнуть плечом или открыть рукой.
+    static HouseDoor BuildDoor(Transform house)
     {
         var door = new GameObject("Door").transform;
         door.SetParent(house, false);
@@ -273,9 +275,13 @@ public static class Kordon
         hinge.axis = Vector3.up;
         hinge.anchor = Vector3.zero;
         hinge.useLimits = true;
-        hinge.limits = new JointLimits { min = -105f, max = 105f };
+        hinge.limits = new JointLimits { min = -95f, max = 95f };
 
-        door.rotation *= Quaternion.Euler(0f, -24f, 0f);
+        door.rotation *= Quaternion.Euler(0f, DoorAjar, 0f);
+
+        var control = door.gameObject.AddComponent<HouseDoor>();
+        control.Setup(hinge, DoorAjar);
+        return control;
     }
 
     static void BuildFurniture(Transform house, Material windowGlass)

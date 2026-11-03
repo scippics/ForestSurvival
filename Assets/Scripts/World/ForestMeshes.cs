@@ -7,8 +7,13 @@ using UnityEngine;
 public static class ForestMeshes
 {
     const int TrunkSides = 8;
-    const int CrownSides = 18;
-    const int CrownTiers = 10;
+    const int CrownSides = 14;
+    const int CrownTiers = 7;
+    const int CoreSides = 9;
+    const int CoreTiers = 7;
+    const float CoreShade = 0.4f;
+    const int BoughSteps = 8;
+    const float BoughWidth = 0.1f;
     const int GrassBlades = 6;
     const int FernFronds = 8;
     const int FernSegments = 4;
@@ -40,13 +45,21 @@ public static class ForestMeshes
         return builder.ToMesh("Trunk");
     }
 
-    // Ель из наложенных ярусов лап. Каждый ярус — зубчатая юбка с провисшими кончиками: сверху
-    // её закрывает ярус выше, поэтому верх тёмный, а кончики светлые. Дальние деревья берут версию проще.
+    // Ель. Вблизи это сотни отдельных провисших лап вокруг тёмной сердцевины: контур рваный,
+    // а сквозь него видно небо. Издалека лапы неразличимы, и дальним деревьям хватает зубчатых ярусов.
     public static Mesh BuildCrown(bool lowDetail)
     {
         var builder = new MeshBuilder();
         var random = new System.Random(Seed + 1);
-        AddBranchTiers(builder, random, 0.17f, 0.82f, 0.86f, 0.1f, lowDetail ? 5 : CrownTiers, lowDetail ? 10 : CrownSides);
+        if (lowDetail)
+        {
+            AddBranchTiers(builder, random, 0.17f, 0.82f, 0.86f, 0.1f, CrownTiers, CrownSides);
+        }
+        else
+        {
+            AddBranchTiers(builder, random, 0.2f, 0.84f, 0.5f, 0.07f, CoreTiers, CoreSides, CoreShade);
+            AddBoughs(builder, random, 0.16f, 0.95f, 0.8f, 0.08f, 30, 12, 0.07f);
+        }
         return builder.ToMesh(lowDetail ? "CrownLow" : "Crown");
     }
 
@@ -55,7 +68,15 @@ public static class ForestMeshes
     {
         var builder = new MeshBuilder();
         var random = new System.Random(Seed + 11);
-        AddBranchTiers(builder, random, 0.62f, 0.9f, 1.05f, 0.34f, lowDetail ? 3 : 6, lowDetail ? 9 : 15);
+        if (lowDetail)
+        {
+            AddBranchTiers(builder, random, 0.62f, 0.9f, 1.05f, 0.34f, 3, 9);
+        }
+        else
+        {
+            AddBranchTiers(builder, random, 0.66f, 0.9f, 0.6f, 0.2f, 4, CoreSides, CoreShade);
+            AddBoughs(builder, random, 0.6f, 0.98f, 1.1f, 0.3f, 13, 12, 0.03f);
+        }
         return builder.ToMesh(lowDetail ? "PineLow" : "Pine");
     }
 
@@ -64,16 +85,16 @@ public static class ForestMeshes
     {
         var builder = new MeshBuilder();
         var random = new System.Random(Seed + 12);
-        int lumps = lowDetail ? 5 : 16;
-        int rings = lowDetail ? 3 : 5;
-        int sides = lowDetail ? 5 : 8;
+        int lumps = lowDetail ? 5 : 46;
+        int rings = lowDetail ? 3 : 3;
+        int sides = lowDetail ? 5 : 6;
         for (int i = 0; i < lumps; i++)
         {
             float t = (i + 0.5f) / lumps;
             float height = Mathf.Lerp(0.42f, 0.95f, t);
             float angle = (float)random.NextDouble() * Mathf.PI * 2f;
             float reach = Mathf.Lerp(0.95f, 0.1f, t * t) * ((float)random.NextDouble() * 0.5f + 0.5f);
-            float size = Mathf.Lerp(0.75f, 0.38f, t) * (lowDetail ? 1.6f : 1f);
+            float size = lowDetail ? Mathf.Lerp(1.2f, 0.6f, t) : Mathf.Lerp(0.34f, 0.2f, t);
             var center = new Vector3(Mathf.Cos(angle) * reach, height, Mathf.Sin(angle) * reach);
             AddBlob(builder, random, center, new Vector3(size, size * 0.14f, size), rings, sides);
         }
@@ -115,7 +136,55 @@ public static class ForestMeshes
         return builder.ToMesh("Stump");
     }
 
-    static void AddBranchTiers(MeshBuilder builder, System.Random random, float firstBottom, float lastBottom, float firstRadius, float lastRadius, int tiers, int sides)
+    static void AddBoughs(MeshBuilder builder, System.Random random, float bottom, float top, float firstLength, float lastLength, int whorls, int boughs, float droop)
+    {
+        for (int whorl = 0; whorl < whorls; whorl++)
+        {
+            float t = whorl / (whorls - 1f);
+            float height = Mathf.Lerp(bottom, top, t);
+            float length = Mathf.Lerp(firstLength, lastLength, Mathf.Pow(t, 0.92f));
+            int count = Mathf.Max(3, Mathf.RoundToInt(Mathf.Lerp(boughs, boughs * 0.5f, t)));
+            float twist = (float)random.NextDouble() * Mathf.PI * 2f;
+
+            for (int i = 0; i < count; i++)
+            {
+                float angle = twist + (i + ((float)random.NextDouble() - 0.5f) * 0.6f) * Mathf.PI * 2f / count;
+                float jitter = 0.8f + (float)random.NextDouble() * 0.4f;
+                AddBough(builder, random, angle, height + ((float)random.NextDouble() - 0.5f) * 0.012f, length * jitter, droop * jitter);
+            }
+        }
+    }
+
+    // Лапа: прогнутый вниз черенок и перья хвои по обе стороны, каждое своим треугольником.
+    static void AddBough(MeshBuilder builder, System.Random random, float angle, float height, float length, float droop)
+    {
+        var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+        var side = new Vector3(-radial.z, 0f, radial.x);
+        float width = length * BoughWidth;
+
+        Vector3 Spine(float t) => radial * (length * (0.06f + t * 0.94f)) + Vector3.up * (height - droop * t * t);
+
+        for (int step = 0; step < BoughSteps; step++)
+        {
+            float t0 = step / (float)BoughSteps;
+            float t1 = (step + 1f) / BoughSteps;
+            float shade = Mathf.Lerp(0.42f, 1f, t1);
+            int start = builder.VertexCount;
+
+            builder.Add(Spine(t0), (radial * 0.3f + Vector3.up).normalized, shade * 0.8f, 0.2f);
+            builder.Add(Spine(t1), (radial * 0.3f + Vector3.up).normalized, shade * 0.8f, 0.2f);
+
+            foreach (float sign in new[] { -1f, 1f })
+            {
+                float feather = width * (1f - t0 * 0.72f) * (0.75f + (float)random.NextDouble() * 0.5f);
+                Vector3 tip = Spine(t1 + 0.09f) + side * (sign * feather) + Vector3.down * (droop * 0.14f);
+                builder.Add(tip, (radial * 0.3f + side * (sign * 0.35f) + Vector3.up).normalized, shade, 1f);
+                builder.AddTriangle(start, start + 1, builder.VertexCount - 1);
+            }
+        }
+    }
+
+    static void AddBranchTiers(MeshBuilder builder, System.Random random, float firstBottom, float lastBottom, float firstRadius, float lastRadius, int tiers, int sides, float shadeScale = 1f)
     {
         for (int tier = 0; tier < tiers; tier++)
         {
@@ -130,7 +199,7 @@ public static class ForestMeshes
             {
                 float angle = twist + side * Mathf.PI * 2f / sides;
                 var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-                builder.Add(radial * (radius * 0.28f) + Vector3.up * top, (radial * 0.5f + Vector3.up).normalized, 0.35f, 0f);
+                builder.Add(radial * (radius * 0.28f) + Vector3.up * top, (radial * 0.5f + Vector3.up).normalized, 0.35f * shadeScale, 0f);
             }
 
             for (int side = 0; side < sides; side++)
@@ -141,14 +210,14 @@ public static class ForestMeshes
                 float jitter = 1f + ((float)random.NextDouble() - 0.5f) * 0.3f;
                 float reach = radius * (isBranch ? 1f : 0.66f) * jitter;
                 float droop = isBranch ? radius * 0.05f : -radius * 0.04f;
-                builder.Add(radial * reach + Vector3.up * (bottom - droop), (radial + Vector3.up * 0.55f).normalized, 1f, isBranch ? 1f : 0.35f);
+                builder.Add(radial * reach + Vector3.up * (bottom - droop), (radial + Vector3.up * 0.55f).normalized, shadeScale, (isBranch ? 1f : 0.35f) * shadeScale);
             }
 
             for (int side = 0; side < sides; side++)
             {
                 float angle = twist + side * Mathf.PI * 2f / sides;
                 var radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-                builder.Add(radial * (radius * 0.2f) + Vector3.up * (bottom + (top - bottom) * 0.25f), Vector3.down, 0.12f, 0f);
+                builder.Add(radial * (radius * 0.2f) + Vector3.up * (bottom + (top - bottom) * 0.25f), Vector3.down, 0.12f * shadeScale, 0f);
             }
 
             builder.ConnectRings(start, 3, sides);

@@ -20,6 +20,8 @@ public static class VehicleExterior
     static readonly Color CanColor = new Color(0.17f, 0.05f, 0.04f);
 
     public const float WiperRestAngle = 82f;
+    public const float BladeInner = 0.08f;
+    public const float BladeOuter = 0.58f;
 
     public static readonly System.Collections.Generic.List<Transform> Wipers = new System.Collections.Generic.List<Transform>();
 

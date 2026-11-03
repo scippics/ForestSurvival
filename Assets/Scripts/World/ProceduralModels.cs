@@ -259,10 +259,10 @@ public static class ProceduralModels
         CharacterModel.Build(player, MannequinName, MannequinHeadName);
     }
 
-    // Куртка у каждого игрока своя, у бота сигнальная: так их проще различить в лесу.
+    // Куртка у каждого игрока своя, у Кузьмича старая и выцветшая: так их проще различить в лесу.
     public static void PaintMannequin(Transform mannequin, ulong clientId)
     {
-        Color color = clientId == ulong.MaxValue ? CharacterModel.JacketKey : JacketColors[(int)(clientId % (ulong)JacketColors.Length)];
+        Color color = clientId == ulong.MaxValue ? CharacterModel.WornJacket : JacketColors[(int)(clientId % (ulong)JacketColors.Length)];
         Material jacket = CharacterModel.NewJacket(color);
         foreach (Renderer part in mannequin.GetComponentsInChildren<Renderer>())
         {

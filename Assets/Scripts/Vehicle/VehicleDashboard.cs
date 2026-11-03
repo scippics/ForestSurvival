@@ -31,12 +31,11 @@ public class VehicleDashboard : MonoBehaviour
     const float FreshenerDamping = 1.6f;
     const float FreshenerMaxAngle = 38f;
 
-    const float WiperSweepPerSecond = 1.15f;
+    const float WiperSlowSweep = 0.85f;
+    const float WiperFastSweep = 1.5f;
+    const float WiperSlowPause = 2.2f;
     const float WiperSweepDegrees = 95f;
-    const float WiperMinRain = 0.08f;
-
-    static readonly int WiperPhaseId = Shader.PropertyToID("_ForestWiperPhase");
-    static readonly int WiperOnId = Shader.PropertyToID("_ForestWiperOn");
+    const float WiperThumpVolume = 0.08f;
 
     const int MirrorWidth = 384;
     const int MirrorHeight = 100;
@@ -77,6 +76,7 @@ public class VehicleDashboard : MonoBehaviour
     public float SteeringWheelAngle => -controller.SteerAngle * SteeringWheelTurns;
     public float HandbrakeLeverAngle { get; private set; } = HandbrakeLowered;
     public Camera MirrorCamera => mirrorCamera;
+    public float WiperAngle => wiperAngle;
 
     readonly List<Arm> arms = new List<Arm>();
     VehicleController controller;
@@ -88,6 +88,9 @@ public class VehicleDashboard : MonoBehaviour
     float freshenerSpeed;
     float shownFuel;
     float wiperPhase;
+    float wiperPause;
+    float wiperAngle = VehicleExterior.WiperRestAngle;
+    WindshieldWater water;
 
     public void AddArm(Transform hand, Transform forearm, Vector3 shoulder)
     {
@@ -98,6 +101,7 @@ public class VehicleDashboard : MonoBehaviour
     {
         controller = GetComponent<VehicleController>();
         body = GetComponent<Rigidbody>();
+        water = gameObject.AddComponent<WindshieldWater>();
     }
 
     void Start()
@@ -215,24 +219,47 @@ public class VehicleDashboard : MonoBehaviour
         Freshener.localRotation = Quaternion.Euler(freshenerAngle, freshenerAngle * 25f % 25f, 0f);
     }
 
-    // Дворники работают от мотора. Без него они останавливаются там, где застал дождь.
+    // Дворники работают от мотора: выключенные или без него дохаживают ход и ложатся на место.
     void UpdateWipers(float dt, bool occupied)
     {
-        bool on = occupied && controller.EngineRunning && ForestWeather.Rain > WiperMinRain;
-        if (on || wiperPhase > 0f)
+        int mode = occupied && controller.EngineRunning ? controller.WiperMode : VehicleController.WipersOff;
+        float angleBefore = wiperAngle;
+
+        if (mode == VehicleController.WipersSlow && wiperPause > 0f)
         {
-            wiperPhase += dt * WiperSweepPerSecond;
+            wiperPause -= dt;
+        }
+        else if (mode != VehicleController.WipersOff || wiperPhase > 0f)
+        {
+            float before = wiperPhase;
+            wiperPhase += dt * (mode == VehicleController.WipersFast ? WiperFastSweep : WiperSlowSweep);
+            if (before < 1f && wiperPhase >= 1f)
+                Thump();
             if (wiperPhase >= 2f)
-                wiperPhase = on ? wiperPhase - 2f : 0f;
+            {
+                Thump();
+                wiperPhase = mode == VehicleController.WipersOff ? 0f : wiperPhase - 2f;
+                if (mode == VehicleController.WipersSlow)
+                {
+                    wiperPhase = 0f;
+                    wiperPause = WiperSlowPause;
+                }
+            }
         }
 
         float travel = wiperPhase < 1f ? wiperPhase : 2f - wiperPhase;
-        Quaternion rotation = Quaternion.Euler(0f, 0f, VehicleExterior.WiperRestAngle - Mathf.SmoothStep(0f, 1f, travel) * WiperSweepDegrees);
+        wiperAngle = VehicleExterior.WiperRestAngle - Mathf.SmoothStep(0f, 1f, travel) * WiperSweepDegrees;
+        Quaternion rotation = Quaternion.Euler(0f, 0f, wiperAngle);
         foreach (Transform wiper in VehicleExterior.Wipers)
             wiper.localRotation = rotation;
 
-        Shader.SetGlobalFloat(WiperPhaseId, wiperPhase);
-        Shader.SetGlobalFloat(WiperOnId, on ? 1f : 0f);
+        water.Step(dt, controller.ForwardSpeed, angleBefore, wiperAngle);
+    }
+
+    void Thump()
+    {
+        if (controller.Driver != null)
+            ForestAudio.Play(ForestSound.Click, WiperThumpVolume);
     }
 
     void UpdateArms(bool occupied)

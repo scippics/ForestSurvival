@@ -38,6 +38,9 @@ public class StoryDirector : MonoBehaviour
     public bool CampNoteRead { get; private set; }
     public bool InCutscene => GameFlow.State == GameState.Cutscene;
 
+    // У клиента своя стадия всегда Free, а настоящая приходит от хоста.
+    public StoryStage SharedStage => hostStage != StoryStage.None ? hostStage : Stage;
+
     StoryUI ui;
     PlayerSeat seat;
     PlayerCamera view;
