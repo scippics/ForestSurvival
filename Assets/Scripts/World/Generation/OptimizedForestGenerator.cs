@@ -119,6 +119,8 @@ public class OptimizedForestGenerator : MonoBehaviour
     const double WreckBatteryChance = 0.25;
     const double WreckPadChance = 0.45;
     const double WreckByRoadChance = 0.6;
+    const double DerelictShare = 0.2;
+    const float DerelictRadius = 4.6f;
     // Те же числа в CustomWindFoliage.shader.
     const float CrownFadeStart = 26f;
     const float CrownFadeEnd = 34f;
@@ -148,6 +150,7 @@ public class OptimizedForestGenerator : MonoBehaviour
         public float Radius;
         public int Spec;
         public int Seed;
+        public bool Derelict;
     }
 
     struct Camp
@@ -409,19 +412,26 @@ public class OptimizedForestGenerator : MonoBehaviour
         {
             site.Spec = random.Next(WreckBuilder.Catalog.Length);
             WreckSpec spec = WreckBuilder.Catalog[site.Spec];
+
+            // Свой генератор: остальные развалины остаются на прежних местах. Первое число от похожих зёрен
+            // почти одинаковое, поэтому оно пропускается.
+            var derelictRandom = new System.Random(ChunkSeed(coord, 13));
+            derelictRandom.Next();
+            derelictRandom.Next();
+            site.Derelict = derelictRandom.NextDouble() < DerelictShare;
             float room = ChunkSize * 0.5f - spec.Length * 0.5f - 3f;
             float centerX = coord.x * ChunkSize;
             site.Z = coord.y * ChunkSize + ((float)random.NextDouble() * 2f - 1f) * room;
             float road = RoadCenterX(coord.x, site.Z);
 
-            bool byRoad = random.NextDouble() < WreckByRoadChance;
+            bool byRoad = random.NextDouble() < WreckByRoadChance || site.Derelict;
             float side = random.NextDouble() < 0.5 ? -1f : 1f;
             float offset = RoadHalfWidth + spec.Width * 0.5f + 0.6f + (float)random.NextDouble() * (byRoad ? 2.5f : 14f);
             site.X = Mathf.Clamp(road + side * offset, centerX - room, centerX + room);
 
             float heading = Mathf.Atan2(RoadCenterX(coord.x, site.Z + 5f) - road, 5f) * Mathf.Rad2Deg;
             site.Yaw = byRoad ? heading + ((float)random.NextDouble() - 0.5f) * 30f + (random.NextDouble() < 0.5 ? 180f : 0f) : (float)random.NextDouble() * 360f;
-            site.Radius = spec.Length * 0.5f + 1.8f;
+            site.Radius = site.Derelict ? DerelictRadius : spec.Length * 0.5f + 1.8f;
             site.Seed = ChunkSeed(coord, 12);
             site.Exists = Mathf.Abs(site.X - road) > RoadHalfWidth + spec.Width * 0.4f;
         }
@@ -483,7 +493,10 @@ public class OptimizedForestGenerator : MonoBehaviour
         }
 
         var ground = new Vector3(site.X, TerrainHeight(site.X, site.Z), site.Z);
-        wreck = WreckBuilder.Spawn(chunk.Coord.x + "." + chunk.Coord.y, site.Spec, ground, site.Yaw, site.Seed);
+        string wreckId = chunk.Coord.x + "." + chunk.Coord.y;
+        wreck = site.Derelict && DerelictCar.Available
+            ? DerelictCar.Spawn(wreckId, ground, site.Yaw, site.Seed)
+            : WreckBuilder.Spawn(wreckId, site.Spec, ground, site.Yaw, site.Seed);
         wreck.transform.SetParent(transform, true);
         wreckObjects[chunk.Coord] = wreck;
 
