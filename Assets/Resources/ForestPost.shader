@@ -207,13 +207,15 @@ Shader "Hidden/ForestPost"
         // Прохладные тени и чуть меньше насыщенности: лес должен быть холодным, а не кислотным.
         float luma = Luma(color);
         color = lerp(luma.xxx, color, 0.92);
-        color *= lerp(float3(0.93, 0.98, 1.08), float3(1.03, 1.0, 0.96), saturate(luma * 2.5));
+        color *= lerp(float3(0.86, 0.99, 1.08), float3(1.06, 1.0, 0.92), saturate(luma * 2.5));
 
         float2 centered = i.uv - 0.5;
         color *= saturate(1.0 - dot(centered, centered) * _VignetteStrength);
 
         // Плёночное зерно в гамма-пространстве заодно убирает полосы в тёмном тумане.
+        // Там же S-кривая: глубже тени и плотнее свет, серый туман перестаёт съедать контраст.
         float3 display = LinearToGammaSpace(color);
+        display = lerp(display, display * display * (3.0 - 2.0 * display), 0.4);
         float grain = WhiteNoise(i.pos.xy + _GrainTime) - 0.5;
         display += grain * 0.018;
         color = GammaToLinearSpace(saturate(display));

@@ -11,7 +11,7 @@ public class DayNightCycle : MonoBehaviour
     const float AmbientSkyFromFog = 2.7f;
     const float AmbientEquatorFromFog = 2.15f;
     const float AmbientGroundFromFog = 1.35f;
-    const float CabinFillFromFog = 1.25f;
+    const float CabinFillFromFog = 0.7f;
     const float DarkSunHeight = 0.1f;
 
     // Косые лучи кладут длинные тени от стволов и крон параллельно друг другу: чем ниже солнце, тем они мягче,

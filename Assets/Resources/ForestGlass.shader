@@ -130,7 +130,7 @@ Shader "Forest/Glass"
                     // Боковые стёкла ближе к глазам, поэтому капли на них мельче: иначе они смотрятся пузырями.
                     float4 drops = Running(uv, run, t, front ? 1.0 : 0.6, saturate((wet - 0.35) * 1.6) * 0.5)
                         + Running(uv + float2(0.37, 0.11), run * 0.7, t * 0.8, 0.6, saturate((wet - 0.2) * 1.6) * 0.4)
-                        + Beads(uv, front ? 0.021 : 0.014, t, saturate(wet * 1.2) * 0.68)
+                        + Beads(uv, front ? 0.028 : 0.014, t, saturate(wet * 1.2) * 0.68)
                         + Beads(uv + 0.19, 0.009, t * 1.4, saturate(wet * 1.4) * 0.7);
 
                     float mask = saturate(drops.z);

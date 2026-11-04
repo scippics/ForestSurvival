@@ -168,12 +168,17 @@ Shader "Forest/Lit"
                 smoothness *= (1.0 - mud) * lerp(1.0, 0.5 + fine, _Grime);
             }
 
+            // Рассеянный свет неба не знает про крышу и залил бы кабину серым: внутри он слабее, а у пола почти гаснет.
+            bool cabin = _Surface > 0.5 && _Surface < 6.5;
+            if (cabin && dot(IN.vehiclePos, IN.vehiclePos) < 16.0)
+                albedo *= lerp(0.42, 0.7, saturate((IN.vehiclePos.y - 0.05) / 0.75));
+
             o.Albedo = albedo;
             o.Smoothness = smoothness;
             o.Emission = _EmissionColor.rgb * tex2D(_EmissionMap, IN.uv_MainTex).rgb;
 
             // В закрытой кабине тени чёрные, хотя свет идёт через стёкла: это рассеянная подсветка от них.
-            if (_Surface > 0.5 && _Surface < 6.5)
+            if (cabin)
                 o.Emission += albedo * _ForestCabinFill;
             o.Alpha = 1;
         }

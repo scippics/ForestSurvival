@@ -11,7 +11,7 @@ public static class RuntimeBootstrapper
     const float FogDensity = 0.042f;
     const float CameraFarClip = 90f;
     const float HeadlightBeamLength = 22f;
-    const float HeadlightBeamStrength = 0.1f;
+    const float HeadlightBeamStrength = 0.3f;
 
     static readonly Color CarColor = new Color(0.17f, 0.19f, 0.12f);
     static readonly Color CarDarkColor = new Color(0.04f, 0.04f, 0.042f);
@@ -247,7 +247,7 @@ public static class RuntimeBootstrapper
     {
         foreach (float side in new[] { -1f, 1f })
         {
-            var headlight = CreateVehicleLight(controller, "Headlight", new Vector3(side * 0.6f, -0.1f, 2.05f), Quaternion.Euler(5f, 0f, 0f));
+            var headlight = CreateVehicleLight(controller, "Headlight", new Vector3(side * 0.6f, -0.1f, 2.05f), Quaternion.Euler(2.5f, 0f, 0f));
             headlight.type = LightType.Spot;
             headlight.range = 70f;
             headlight.spotAngle = 65f;

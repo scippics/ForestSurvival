@@ -15,15 +15,15 @@ public static class VehicleInterior
     static readonly Color UpholsteryDark = new Color(0.16f, 0.13f, 0.1f);
     static readonly Color Headliner = new Color(0.3f, 0.285f, 0.25f);
     static readonly Color Carpet = new Color(0.16f, 0.15f, 0.14f);
-    static readonly Color Chrome = new Color(0.36f, 0.36f, 0.35f);
+    static readonly Color Chrome = new Color(0.24f, 0.24f, 0.23f);
     static readonly Color BlackMetal = new Color(0.07f, 0.07f, 0.07f);
     static readonly Color Webbing = new Color(0.16f, 0.16f, 0.17f);
     static readonly Color Sleeve = new Color(0.16f, 0.2f, 0.13f);
     static readonly Color Skin = new Color(0.16f, 0.12f, 0.08f);
-    static readonly Color Freshener = new Color(0.1f, 0.42f, 0.16f);
+    static readonly Color Freshener = new Color(0.05f, 0.24f, 0.09f);
     static readonly Color ToolboxColor = new Color(0.45f, 0.1f, 0.07f);
 
-    static readonly Color DialGlow = new Color(0.55f, 1f, 0.62f);
+    static readonly Color DialGlow = new Color(1f, 0.72f, 0.42f);
     static readonly Color RadioGlow = new Color(1f, 0.6f, 0.15f);
     static readonly Color NeedleGlow = new Color(1f, 0.28f, 0.08f);
     static readonly Color HandbrakeLamp = new Color(1f, 0.08f, 0.05f);

@@ -193,7 +193,7 @@ public class VehicleDashboard : MonoBehaviour
     {
         // Днём шкалы подсвечены едва, чтобы читаться в тени; с фарами загорается полная подсветка.
         float glow = controller.LightsOn ? DialNightGlow : DialDayGlow;
-        Color dial = new Color(0.55f, 1f, 0.62f) * glow;
+        Color dial = new Color(1f, 0.8f, 0.55f) * glow;
         SpeedDial.SetColor("_EmissionColor", dial);
         RpmDial.SetColor("_EmissionColor", dial);
         FuelBarMaterial.SetColor("_EmissionColor", controller.IsLowFuel ? FuelOnColor * glow : dial);

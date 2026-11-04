@@ -4,7 +4,7 @@ using UnityEngine;
 public class LightBeam : MonoBehaviour
 {
     const int Sides = 20;
-    const float DayFactor = 0.2f;
+    const float DayFactor = 0.35f;
 
     static Mesh coneMesh;
 

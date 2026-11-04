@@ -14,6 +14,7 @@ public class FirstPersonArms : MonoBehaviour
     static readonly Vector3 LeftShoulder = new Vector3(-0.3f, -0.42f, -0.05f);
     static readonly Vector3 RightShoulder = new Vector3(0.3f, -0.42f, -0.05f);
     static readonly Vector3 TorchHand = new Vector3(0.2f, -0.22f, 0.42f);
+    const float CabinArmShade = 0.7f;
     static readonly Color SleeveColor = new Color(0.16f, 0.2f, 0.13f);
     static readonly Color GloveColor = new Color(0.16f, 0.12f, 0.08f);
     static readonly Color TorchColor = new Color(0.09f, 0.09f, 0.08f);
@@ -34,6 +35,9 @@ public class FirstPersonArms : MonoBehaviour
     Arm left;
     Arm right;
     Transform torch;
+    readonly System.Collections.Generic.List<Material> cloths = new System.Collections.Generic.List<Material>();
+    readonly System.Collections.Generic.List<Material> gloves = new System.Collections.Generic.List<Material>();
+    bool shaded;
 
     public bool LeftVisible => left.Sleeve.gameObject.activeSelf;
     public bool RightVisible => right.Sleeve.gameObject.activeSelf;
@@ -66,6 +70,8 @@ public class FirstPersonArms : MonoBehaviour
     {
         Material cloth = ProceduralModels.Lit(SleeveColor, 0f, 0f, 0.05f, 9);
         Material glove = ProceduralModels.Lit(GloveColor, 0f, 0f, 0.05f, 9);
+        cloths.Add(cloth);
+        gloves.Add(glove);
 
         var arm = new Arm { Shoulder = shoulder, Current = shoulder + Vector3.down * HiddenDrop };
         arm.Sleeve = ProceduralModels.Part(transform, "ViewSleeve", PrimitiveType.Cylinder, shoulder, Vector3.one, cloth).transform;
@@ -85,8 +91,22 @@ public class FirstPersonArms : MonoBehaviour
         renderer.receiveShadows = false;
     }
 
+    // В кабине руки в тени крыши, как и всё вокруг: иначе они светятся на фоне тёмной панели.
+    void UpdateCabinShade()
+    {
+        if (shaded == seat.IsSeated)
+            return;
+        shaded = seat.IsSeated;
+        float shade = shaded ? CabinArmShade : 1f;
+        foreach (Material cloth in cloths)
+            cloth.color = SleeveColor * shade;
+        foreach (Material glove in gloves)
+            glove.color = GloveColor * shade;
+    }
+
     void LateUpdate()
     {
+        UpdateCabinShade();
         bool holding = !seat.IsSeated && hands.Held != null;
         bool torchOn = !seat.IsSeated && !holding && view.Flashlight.enabled;
         torch.gameObject.SetActive(torchOn);
