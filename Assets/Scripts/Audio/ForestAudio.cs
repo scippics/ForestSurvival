@@ -40,6 +40,7 @@ public class ForestAudio : MonoBehaviour
     static float ambienceFadeTotal;
 
     AudioClip[] clips;
+    AudioClip[][] recorded;
     AudioSource[] pool;
     int poolIndex;
     AudioSource ui, wind, crickets, engine, mud, pour, radio, rain;
@@ -72,7 +73,26 @@ public class ForestAudio : MonoBehaviour
         if (instance == null)
             return;
         instance.ui.pitch = 1f;
-        instance.ui.PlayOneShot(instance.clips[(int)sound], volume);
+        instance.ui.PlayOneShot(instance.Pick(sound), volume);
+    }
+
+    // Записанные звуки лежат в Resources/ForestSounds/<имя>; чего там нет, то остаётся синтезированным.
+    void LoadRecorded()
+    {
+        recorded = new AudioClip[clips.Length][];
+        foreach (ForestSound sound in System.Enum.GetValues(typeof(ForestSound)))
+        {
+            AudioClip[] takes = Resources.LoadAll<AudioClip>("ForestSounds/" + sound);
+            if (takes.Length > 0)
+                recorded[(int)sound] = takes;
+        }
+    }
+
+    // Несколько дублей одного звука идут вперемешку, чтобы ухо не цеплялось за повтор.
+    AudioClip Pick(ForestSound sound)
+    {
+        AudioClip[] takes = recorded != null ? recorded[(int)sound] : null;
+        return takes != null ? takes[random.Next(takes.Length)] : clips[(int)sound];
     }
 
     public static void PlayAt(ForestSound sound, Vector3 position, float volume = 1f, float pitch = 1f)
@@ -82,7 +102,7 @@ public class ForestAudio : MonoBehaviour
         AudioSource source = instance.pool[instance.poolIndex];
         instance.poolIndex = (instance.poolIndex + 1) % PoolSize;
         source.transform.position = position;
-        source.clip = instance.clips[(int)sound];
+        source.clip = instance.Pick(sound);
         source.volume = volume;
         source.pitch = pitch;
         source.Play();
@@ -249,7 +269,7 @@ public class ForestAudio : MonoBehaviour
         {
             stepRemaining = StepDistance;
             ui.pitch = 0.85f + (float)random.NextDouble() * 0.3f;
-            ui.PlayOneShot(clips[(int)ForestSound.Step], 0.42f);
+            ui.PlayOneShot(Pick(ForestSound.Step), 0.42f);
         }
     }
 
@@ -316,6 +336,7 @@ public class ForestAudio : MonoBehaviour
         clips[(int)ForestSound.Crack] = BuildCrack();
         clips[(int)ForestSound.Moan] = BuildMoan();
         clips[(int)ForestSound.Thunder] = BuildThunder();
+        LoadRecorded();
     }
 
     static AudioClip Make(string name, float[] samples)
