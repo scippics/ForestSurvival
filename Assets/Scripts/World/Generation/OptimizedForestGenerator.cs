@@ -47,8 +47,8 @@ public class OptimizedForestGenerator : MonoBehaviour
     const int SpeciesDead = 3;
     const int SpeciesCount = 4;
 
-    const int SaplingsPerChunk = 110;
-    const int BushesPerChunk = 90;
+    const int SaplingsPerChunk = 140;
+    const int BushesPerChunk = 140;
     const int StumpsPerChunk = 6;
     const int LogsPerChunk = 4;
     const int MaxSolidPerChunk = MaxTreesPerChunk + StumpsPerChunk + LogsPerChunk;
@@ -233,7 +233,8 @@ public class OptimizedForestGenerator : MonoBehaviour
     }
 
     readonly TreeKind[] treeKinds = new TreeKind[SpeciesCount];
-    Mesh trunkMesh, grassMesh, fernMesh, rockMesh, bushMesh, stumpMesh, saplingMesh;
+    Mesh trunkMesh, grassMesh, fernMesh, stumpMesh, saplingMesh;
+    Mesh[] rockMeshes, bushMeshes;
     Material grassMaterial, groundMaterial, fernMaterial, rockMaterial, bushMaterial, stumpMaterial, logMaterial;
     Vector2Int centerChunk;
 
@@ -243,10 +244,10 @@ public class OptimizedForestGenerator : MonoBehaviour
         trunkMesh = ForestMeshes.BuildTrunk(TrunkModelRadius);
         saplingMesh = ForestMeshes.BuildSapling();
         grassMesh = ForestMeshes.BuildGrass();
-        bushMesh = ForestMeshes.BuildBush();
+        bushMeshes = NatureMeshes.Bushes(ForestMeshes.BuildBush());
         stumpMesh = ForestMeshes.BuildStump(TrunkModelRadius);
         fernMesh = ForestMeshes.BuildFern();
-        rockMesh = ForestMeshes.BuildRock();
+        rockMeshes = NatureMeshes.Rocks(ForestMeshes.BuildRock());
 
         Material spruceTrunk = CreateFoliageMaterial(TrunkColor, 0.3f, 0f);
         spruceTrunk.SetFloat("_Bark", 1f);
@@ -286,6 +287,11 @@ public class OptimizedForestGenerator : MonoBehaviour
         grassMaterial.SetFloat("_Grass", 1f);
         bushMaterial = CreateFoliageMaterial(BushColor, 0.12f, 0.05f);
         bushMaterial.SetFloat("_Needles", 1f);
+        if (NatureMeshes.BushLeaves != null)
+        {
+            bushMaterial.mainTexture = NatureMeshes.BushLeaves;
+            bushMaterial.SetFloat("_Cutoff", 0.45f);
+        }
         stumpMaterial = CreateFoliageMaterial(DeadTrunkColor, 0f, 0f);
         stumpMaterial.SetFloat("_Bark", 1f);
         stumpMaterial.SetFloat("_Moss", 1f);
@@ -1339,7 +1345,7 @@ public class OptimizedForestGenerator : MonoBehaviour
         }
 
         if (chunk.RockCount > 0)
-            Graphics.DrawMeshInstanced(rockMesh, 0, rockMaterial, chunk.Rocks, chunk.RockCount, null, shadows, near);
+            Graphics.DrawMeshInstanced(Variant(rockMeshes, chunk), 0, rockMaterial, chunk.Rocks, chunk.RockCount, null, shadows, near);
 
         if (chunk.SaplingCount > 0)
         {
@@ -1353,11 +1359,18 @@ public class OptimizedForestGenerator : MonoBehaviour
         if (chunk.FernCount > 0)
             Graphics.DrawMeshInstanced(fernMesh, 0, fernMaterial, chunk.Ferns, chunk.FernCount, null, ShadowCastingMode.Off, true);
         if (chunk.BushCount > 0)
-            Graphics.DrawMeshInstanced(bushMesh, 0, bushMaterial, chunk.Bushes, chunk.BushCount, null, ShadowCastingMode.On, true);
+            Graphics.DrawMeshInstanced(Variant(bushMeshes, chunk), 0, bushMaterial, chunk.Bushes, chunk.BushCount, null, ShadowCastingMode.On, true);
         if (chunk.StumpCount > 0)
             Graphics.DrawMeshInstanced(stumpMesh, 0, stumpMaterial, chunk.Stumps, chunk.StumpCount, null, ShadowCastingMode.On, true);
         if (chunk.LogCount > 0)
             Graphics.DrawMeshInstanced(trunkMesh, 0, logMaterial, chunk.Logs, chunk.LogCount, null, ShadowCastingMode.On, true);
+    }
+
+    // Один вид камней и кустов на участок: так они рисуются одной пачкой, а соседние участки отличаются.
+    static Mesh Variant(Mesh[] meshes, Chunk chunk)
+    {
+        int index = chunk.Coord.x * 7 + chunk.Coord.y * 13;
+        return meshes[((index % meshes.Length) + meshes.Length) % meshes.Length];
     }
 
     void Draw(Camera view)

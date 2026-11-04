@@ -16,6 +16,8 @@ Shader "Forest/CustomWindFoliage"
         _Moss ("Moss", Range(0, 1)) = 0
         _Birch ("Birch Bark", Range(0, 1)) = 0
         _LodSide ("LOD Side", Float) = 0
+        _MainTex ("Leaves", 2D) = "white" {}
+        _Cutoff ("Leaf Cutoff", Range(0, 1)) = 0
     }
     SubShader
     {
@@ -41,8 +43,11 @@ Shader "Forest/CustomWindFoliage"
             float2 treeOrigin;
             float4 screenPos;
             float lodKeep;
+            float2 uv_MainTex;
         };
 
+        sampler2D _MainTex;
+        float _Cutoff;
         sampler2D _ForestNoise;
         float3 _ForestSunDirection;
         float3 _ForestSunColor;
@@ -112,6 +117,15 @@ Shader "Forest/CustomWindFoliage"
             }
 
             float3 albedo = UNITY_ACCESS_INSTANCED_PROP(FoliageProps, _Color).rgb;
+
+            // Листья с прозрачностью. От текстуры берётся только форма и яркость: цвет остаётся цветом этого леса.
+            if (_Cutoff > 0)
+            {
+                fixed4 leaf = tex2D(_MainTex, IN.uv_MainTex);
+                clip(leaf.a - _Cutoff);
+                albedo *= lerp(0.55, 1.5, dot(leaf.rgb, float3(0.3, 0.6, 0.1)));
+            }
+
             float occlusion = IN.color.r;
             float tip = IN.color.g;
             float3 world = IN.worldPos;
