@@ -34,6 +34,10 @@ public class PlayerAvatar : NetworkBehaviour
     PlayerCamera view;
     PlayerSeat seat;
     CapsuleCollider capsule;
+    VehicleController car;
+    const float CarClearWidth = 1.35f;
+    const float CarClearLength = 3.1f;
+    const float CarClearHeight = 2f;
     float shownYaw;
     float shownPitch;
 
@@ -42,6 +46,16 @@ public class PlayerAvatar : NetworkBehaviour
         capsule = GetComponent<CapsuleCollider>();
         bodyPivot = transform.Find(ProceduralModels.MannequinName);
         headPivot = bodyPivot.Find(ProceduralModels.MannequinHeadName);
+    }
+
+    bool InsideCar()
+    {
+        if (car == null)
+            car = FindAnyObjectByType<VehicleController>();
+        if (car == null)
+            return false;
+        Vector3 local = car.transform.InverseTransformPoint(transform.position);
+        return Mathf.Abs(local.x) < CarClearWidth && Mathf.Abs(local.z) < CarClearLength && Mathf.Abs(local.y) < CarClearHeight;
     }
 
     public override void OnNetworkSpawn()
@@ -89,8 +103,9 @@ public class PlayerAvatar : NetworkBehaviour
         }
         else if (!IsLocal)
         {
-            // Чужой водитель сидит внутри кабины: его капсула не должна толкать машину.
-            capsule.enabled = !seated.Value;
+            // Чужой водитель сидит внутри кабины: его капсула не должна толкать машину. После выхода его тело
+            // приходит по сети с задержкой, а твёрдая капсула внутри кузова перевернула бы машину.
+            capsule.enabled = !seated.Value && !InsideCar();
         }
 
         Vector2 target = look.Value;
