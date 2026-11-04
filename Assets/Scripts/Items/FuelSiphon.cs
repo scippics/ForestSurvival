@@ -93,7 +93,7 @@ public class FuelSiphon : MonoBehaviour
     {
         car.OpenCap();
         ForestAudio.Play(ForestSound.Click, 0.4f);
-        if (car.Liters < 0.1f)
+        if (car.IsDry)
             return false;
 
         Source = car;

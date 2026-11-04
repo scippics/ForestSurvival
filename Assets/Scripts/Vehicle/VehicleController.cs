@@ -50,6 +50,8 @@ public class VehicleController : MonoBehaviour
     const float WornTorque = 0.45f;
     const float FillerSwing = 110f;
     const float FillerResponse = 9f;
+    const float FillerOpenOut = 0.052f;
+    const float FillerOpenForward = 0.074f;
     const float LowFuelFraction = 0.15f;
 
     public const int WipersOff = 0;
@@ -436,7 +438,9 @@ public class VehicleController : MonoBehaviour
         if (fillerCap != null)
         {
             fillerAngle = Mathf.Lerp(fillerAngle, FillerOpen ? FillerSwing : 0f, 1f - Mathf.Exp(-FillerResponse * Time.deltaTime));
-            fillerCap.SetLocalPositionAndRotation(fillerRest + new Vector3(fillerAngle / FillerSwing * 0.06f, 0f, 0f), fillerRestRotation * Quaternion.Euler(0f, 0f, fillerAngle));
+            // Лючок на боку кузова: петля у переднего края, задний край отходит наружу.
+            Vector3 swing = new Vector3(Mathf.Sign(fillerRest.x) * FillerOpenOut, 0f, FillerOpenForward) * (fillerAngle / FillerSwing);
+            fillerCap.SetLocalPositionAndRotation(fillerRest + swing, Quaternion.AngleAxis(fillerAngle, Vector3.up) * fillerRestRotation);
         }
 
         foreach (Wheel wheel in wheels)

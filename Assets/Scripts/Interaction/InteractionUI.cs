@@ -184,7 +184,7 @@ public class InteractionUI : MonoBehaviour
         bool aimed = InteractionRay.Cast(transform, out RaycastHit hit);
         action = "";
         CurrentKey = ResolveKey(aimed, hit);
-        CurrentAction = action;
+        CurrentAction = action.Length > 0 ? action : HeldReadout();
 
         // Нет своей цели под прицелом: кайма показывает, куда нести то, что в руках.
         if (outlined == null)
@@ -199,6 +199,18 @@ public class InteractionUI : MonoBehaviour
         dot.enabled = !seat.IsSeated && CurrentKey.Length == 0;
         dot.rectTransform.sizeDelta = Vector2.one * (DotSize * Screen.height / ReferenceHeight);
         DrawKeys();
+    }
+
+    // Сколько бензина под рукой: видно всё время, пока канистра или вставленный шланг в руках.
+    string HeldReadout()
+    {
+        if (hands.Held == null)
+            return "";
+        if (hands.Held.TryGetComponent(out FuelCan can))
+            return "Канистра: " + can.Percent + "%";
+        if (hands.HeldSiphon != null && hands.HeldSiphon.Source != null)
+            return "В баке: " + Mathf.RoundToInt(hands.HeldSiphon.Source.Liters) + " л";
+        return "";
     }
 
     void UpdateHint()
@@ -246,7 +258,7 @@ public class InteractionUI : MonoBehaviour
         foreach (AbandonedCar wreck in FindObjectsByType<AbandonedCar>(FindObjectsSortMode.None))
         {
             float distance = Vector3.Distance(here, wreck.FillerPoint);
-            if (wreck.Liters > 0.1f && distance < bestDistance)
+            if (!wreck.IsDry && distance < bestDistance)
             {
                 best = wreck.Filler;
                 bestDistance = distance;
@@ -313,14 +325,14 @@ public class InteractionUI : MonoBehaviour
         if (hands.HeldSiphon != null && hands.HeldSiphon.IsPumping)
             return "";
 
-        // Сзади машины можно и толкать, и заливать: с канистрой в руках важнее бак.
+        // У машины можно и толкать, и заливать: с канистрой в руках важнее бак.
         if (aimed && hands.Held != null && hands.Held.TryGetComponent(out FuelCan heldCan) && heldCan.Liters > 0f
             && InteractionRay.IsFreeVehicle(hit, out VehicleController car) && car.FuelLiters < car.TankSize)
         {
             outlined = car.FillerCap;
             if (Vector3.Distance(transform.position, car.FillerPoint) > PlayerSeat.PourReach)
                 return "";
-            action = "Держать: залить";
+            action = "Держать: залить (" + heldCan.Percent + "%)";
             return KeyInteract;
         }
 
@@ -335,9 +347,14 @@ public class InteractionUI : MonoBehaviour
         if (!aimed)
             return "";
 
-        if (InteractionRay.IsFiller(hit, out _) && hands.HeldSiphon != null && hands.HeldSiphon.Source == null)
+        if (InteractionRay.IsFiller(hit, out AbandonedCar tank) && hands.HeldSiphon != null && hands.HeldSiphon.Source == null)
         {
             outlined = hit.collider.transform;
+            if (tank.CapIsOpen && tank.IsDry)
+            {
+                action = "Бак сухой";
+                return "";
+            }
             action = "Вставить шланг";
             return KeyGrab;
         }
@@ -350,7 +367,7 @@ public class InteractionUI : MonoBehaviour
         if (InteractionRay.IsFuelTransfer(hands.HeldSiphon, hit))
         {
             outlined = hit.rigidbody.transform;
-            action = "Держать: подсос";
+            action = "Держать: подсос (" + hit.rigidbody.GetComponent<FuelCan>().Percent + "%)";
             return KeyGrab;
         }
         if (InteractionRay.IsCar(hit, out VehicleController boarding) && seat.ChooseSeat(boarding) != PlayerSeat.NoSeat)
@@ -375,6 +392,8 @@ public class InteractionUI : MonoBehaviour
             return "Читать";
         if (body.TryGetComponent(out RoadBlock _))
             return "Оттащить";
+        if (body.TryGetComponent(out FuelCan can))
+            return "Взять (" + can.Percent + "%)";
         return "Взять";
     }
 

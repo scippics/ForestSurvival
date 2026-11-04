@@ -7,6 +7,7 @@ public class AbandonedCar : MonoBehaviour
 {
     const float CapSwing = 110f;
     const float CapResponse = 7f;
+    const float DryLiters = 0.1f;
 
     public class State
     {
@@ -19,6 +20,8 @@ public class AbandonedCar : MonoBehaviour
     public string Id { get; private set; }
     public WreckSpec Spec { get; private set; }
     public float Liters => state.Liters;
+    public bool IsDry => state.Liters < DryLiters;
+    public bool CapIsOpen => capOpen;
     public Vector3 FillerPoint => filler.position;
     public Transform Filler => filler;
     public readonly List<SalvagePart> Parts = new List<SalvagePart>();

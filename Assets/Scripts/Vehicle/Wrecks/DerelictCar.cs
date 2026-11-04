@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Брошенные такси и полиция: редкие находки у дороги, а не примета конца света. Только вид и препятствие,
-// на них нельзя сесть. Модели лежат вне репозитория, поэтому без них на этом месте стоит обычная развалина.
+// Брошенные такси и полиция: редкие находки у дороги, а не примета конца света. На них нельзя сесть,
+// но из бака можно слить бензин. Модели лежат вне репозитория, поэтому без них на этом месте стоит обычная развалина.
 public static class DerelictCar
 {
     public const int PoseNoWheel = 0;
@@ -18,6 +18,10 @@ public static class DerelictCar
     const double DoorGoneChance = 0.15;
     const double HoodOpenChance = 0.4;
     const double TrunkOpenChance = 0.3;
+    const double EmptyTankChance = 0.3;
+    const float MinLiters = 6f;
+    const float MaxLiters = 45f;
+    static readonly Vector3 FillerSpot = new Vector3(0.95f, 0.85f, -1.95f);
 
     const float RoofHeight = 1.5f;
     const float HalfWidth = 0.965f;
@@ -54,6 +58,9 @@ public static class DerelictCar
         var body = root.gameObject.AddComponent<BoxCollider>();
         body.center = BodyCenter;
         body.size = BodySize;
+
+        float liters = random.NextDouble() < EmptyTankChance ? 0f : Range(random, MinLiters, MaxLiters);
+        WreckBuilder.AddTank(root, id, default, FillerSpot, liters);
 
         Place(root, pose, ground, yaw, random);
         return root.gameObject;

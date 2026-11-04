@@ -112,6 +112,20 @@ public static class WreckBuilder
         // Горловина бака: сюда вставляется шланг.
         float belt = BeltY(spec);
         Vector3 fillerSpot = new Vector3(spec.Width * 0.5f + 0.02f, belt - 0.14f, -spec.Length * 0.27f);
+        float liters = forcedLiters >= 0f ? forcedLiters : random.NextDouble() < EmptyTankChance ? 0f : Mathf.Min(spec.TankMax, R(random, 6f, 60f)) * (spec.Style == WreckStyle.Tanker ? 4f : 1f);
+        AbandonedCar car = AddTank(root, id, spec, fillerSpot, liters);
+
+        for (int i = 0; i < spec.Parts.Length; i++)
+        {
+            if (random.NextDouble() < PartChance || i == 0)
+                AddSalvage(car, root, spec, spec.Parts[i]);
+        }
+        return root.gameObject;
+    }
+
+    // Горловина на правом боку и бак с бензином: всё, что нужно, чтобы слить с машины шлангом.
+    public static AbandonedCar AddTank(Transform root, string id, WreckSpec spec, Vector3 fillerSpot, float liters)
+    {
         var filler = new GameObject("Filler");
         filler.tag = InteractionRay.FuelSourceTag;
         filler.transform.SetParent(root, false);
@@ -124,16 +138,9 @@ public static class WreckBuilder
         capHinge.localRotation = Quaternion.Euler(0f, 0f, 90f);
         ProceduralModels.Part(capHinge, "FillerCap", PrimitiveType.Cylinder, new Vector3(-0.05f, 0f, 0f), new Vector3(0.11f, 0.012f, 0.11f), M(Metal, 0.4f));
 
-        float liters = forcedLiters >= 0f ? forcedLiters : random.NextDouble() < EmptyTankChance ? 0f : Mathf.Min(spec.TankMax, R(random, 6f, 60f)) * (spec.Style == WreckStyle.Tanker ? 4f : 1f);
         var car = root.gameObject.AddComponent<AbandonedCar>();
         car.Setup(id, spec, liters, filler.transform, capHinge);
-
-        for (int i = 0; i < spec.Parts.Length; i++)
-        {
-            if (random.NextDouble() < PartChance || i == 0)
-                AddSalvage(car, root, spec, spec.Parts[i]);
-        }
-        return root.gameObject;
+        return car;
     }
 
     static float R(System.Random random, float min, float max)

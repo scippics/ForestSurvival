@@ -252,6 +252,14 @@ public static class VehicleExterior
         ProceduralModels.Part(vehicle, "SnorkelCap", PrimitiveType.Cylinder, new Vector3(0.93f, 1.12f, 1.05f), new Vector3(0.105f, 0.05f, 0.105f), pipe, Quaternion.Euler(30f, 0f, 0f));
     }
 
+    // Горловина бака на левом боку: тёмный патрубок и крышка, которая откидывается, пока льётся бензин.
+    public static void BuildFiller(Transform vehicle, Vector3 point, Material cap)
+    {
+        Quaternion sideways = Quaternion.Euler(0f, 0f, 90f);
+        ProceduralModels.Part(vehicle, "FuelNeck", PrimitiveType.Cylinder, point + Vector3.right * 0.012f, new Vector3(0.09f, 0.016f, 0.09f), ProceduralModels.Lit(new Color(0.015f, 0.015f, 0.015f), 0f, 0f, 0.3f), sideways);
+        ProceduralModels.Part(vehicle, "FuelCap", PrimitiveType.Cylinder, point, new Vector3(0.11f, 0.012f, 0.11f), cap, sideways);
+    }
+
     static void BuildRear(Transform vehicle)
     {
         Material pipe = Clean(Dark, 0.2f);
@@ -259,8 +267,7 @@ public static class VehicleExterior
         // Выхлопная труба и лист рессоры, видные снизу.
         Tube(vehicle, "Exhaust", new Vector3(0.52f, -0.42f, -1.1f), new Vector3(0.56f, -0.42f, -2.2f), 0.03f, pipe);
 
-        // Крышка бака: сюда герой и льёт бензин.
-        ProceduralModels.Part(vehicle, "FuelCap", PrimitiveType.Cylinder, new Vector3(-0.42f, 0.2f, -2.042f), new Vector3(0.11f, 0.012f, 0.11f), Clean(Steel, 0.45f), Quaternion.Euler(90f, 0f, 0f));
+        BuildFiller(vehicle, new Vector3(-0.86f, 0.05f, -1.5f), Clean(Steel, 0.45f));
 
         // Петли и ручка задней двери.
         foreach (float y in new[] { 0.16f, -0.08f })

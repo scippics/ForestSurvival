@@ -236,8 +236,7 @@ public static class RuntimeBootstrapper
             glassMaterial = new Material(Resources.Load<Shader>("ForestGlass"));
         SedanSkin.Build(vehicle, glassMaterial, LampOff, TailOff);
 
-        // Крышка бака за номером: сюда герой и льёт бензин.
-        ProceduralModels.Part(vehicle, "FuelCap", PrimitiveType.Cylinder, new Vector3(-0.42f, -0.1f, -2.685f), new Vector3(0.11f, 0.012f, 0.11f), ProceduralModels.Lit(MetalColor, 0.15f, 0f, 0.45f), Quaternion.Euler(90f, 0f, 0f));
+        VehicleExterior.BuildFiller(vehicle, new Vector3(-0.905f, -0.02f, -1.95f), ProceduralModels.Lit(MetalColor, 0.15f, 0f, 0.45f));
         VehicleExterior.BuildWipers(vehicle);
     }
 

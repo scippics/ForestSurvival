@@ -12,6 +12,7 @@ public class FuelCan : MonoBehaviour
 
     public float Liters { get; private set; }
     public bool IsFull => Liters >= Capacity;
+    public int Percent => Mathf.CeilToInt(Liters / Capacity * 100f);
     public Vector3 SpoutPoint => transform.TransformPoint(SpoutLocal);
 
     Rigidbody body;
