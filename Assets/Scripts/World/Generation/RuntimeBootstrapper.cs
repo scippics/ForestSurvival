@@ -99,10 +99,11 @@ public static class RuntimeBootstrapper
 
         var controller = vehicle.AddComponent<VehicleController>();
         VehicleInterior.Build(controller);
-        AddWheel(controller, "Wheel_FL", new Vector3(-WheelTrack, WheelHeight, WheelBase), true);
-        AddWheel(controller, "Wheel_FR", new Vector3(WheelTrack, WheelHeight, WheelBase), true);
-        AddWheel(controller, "Wheel_RL", new Vector3(-WheelTrack, WheelHeight, -WheelBase), false);
-        AddWheel(controller, "Wheel_RR", new Vector3(WheelTrack, WheelHeight, -WheelBase), false);
+        float track = SedanSkin.Available ? SedanSkin.Track : WheelTrack;
+        AddWheel(controller, "Wheel_FL", new Vector3(-track, WheelHeight, WheelBase), true);
+        AddWheel(controller, "Wheel_FR", new Vector3(track, WheelHeight, WheelBase), true);
+        AddWheel(controller, "Wheel_RL", new Vector3(-track, WheelHeight, -WheelBase), false);
+        AddWheel(controller, "Wheel_RR", new Vector3(track, WheelHeight, -WheelBase), false);
 
         AddVehicleLights(controller);
 
@@ -114,7 +115,7 @@ public static class RuntimeBootstrapper
         pushZone.transform.SetParent(vehicle.transform, false);
         var zone = pushZone.AddComponent<BoxCollider>();
         zone.isTrigger = true;
-        zone.center = new Vector3(0f, 0f, -2.7f);
+        zone.center = new Vector3(0f, 0f, SedanSkin.Available ? -3.2f : -2.7f);
         zone.size = new Vector3(2f, 2.4f, 1.6f);
 
         vehicle.AddComponent<CarLoad>();
@@ -132,6 +133,12 @@ public static class RuntimeBootstrapper
     // чтобы форма и масса не зависели от оформления.
     static void BuildVehicleBody(Transform vehicle)
     {
+        if (SedanSkin.Available)
+        {
+            BuildSedanBody(vehicle);
+            return;
+        }
+
         var hull = new GameObject("HullCollider");
         hull.transform.SetParent(vehicle, false);
         var hullCollider = hull.AddComponent<BoxCollider>();
@@ -208,6 +215,32 @@ public static class RuntimeBootstrapper
         }
     }
 
+    static void AddBox(Transform vehicle, string name, Vector3 center, Vector3 size)
+    {
+        var part = new GameObject(name);
+        part.transform.SetParent(vehicle, false);
+        var box = part.AddComponent<BoxCollider>();
+        box.center = center;
+        box.size = size;
+    }
+
+    // Те же сплошные ящики, что и у прежнего кузова, только по размеру седана.
+    static void BuildSedanBody(Transform vehicle)
+    {
+        AddBox(vehicle, "HullCollider", new Vector3(0f, -0.22f, -0.1f), new Vector3(1.8f, 0.56f, 3.6f));
+        AddBox(vehicle, "CabinCollider", new Vector3(0f, 0.26f, -0.3f), new Vector3(1.7f, 0.62f, 2.3f));
+        AddBox(vehicle, "EndCollider", new Vector3(0f, -0.14f, 1.95f), new Vector3(1.76f, 0.5f, 1.02f));
+        AddBox(vehicle, "EndCollider", new Vector3(0f, -0.14f, -2.15f), new Vector3(1.76f, 0.5f, 1.05f));
+
+        if (glassMaterial == null)
+            glassMaterial = new Material(Resources.Load<Shader>("ForestGlass"));
+        SedanSkin.Build(vehicle, glassMaterial, LampOff, TailOff);
+
+        // Крышка бака за номером: сюда герой и льёт бензин.
+        ProceduralModels.Part(vehicle, "FuelCap", PrimitiveType.Cylinder, new Vector3(-0.42f, -0.1f, -2.685f), new Vector3(0.11f, 0.012f, 0.11f), ProceduralModels.Lit(MetalColor, 0.15f, 0f, 0.45f), Quaternion.Euler(90f, 0f, 0f));
+        VehicleExterior.BuildWipers(vehicle);
+    }
+
     static void AddTyre(Transform parent, Vector3 localPosition, Quaternion localRotation)
     {
         var tyre = new GameObject("Tyre");
@@ -243,8 +276,41 @@ public static class RuntimeBootstrapper
         ProceduralModels.Part(parent, name, shape, localPosition, scale, ProceduralModels.Lit(color, 1f, 0f, 0.28f), localRotation);
     }
 
+    static void AddSedanLights(VehicleController controller)
+    {
+        foreach (float side in new[] { -1f, 1f })
+        {
+            var headlight = CreateVehicleLight(controller, "Headlight", new Vector3(side * 0.6f, -0.15f, 2.47f), Quaternion.Euler(2.5f, 0f, 0f));
+            headlight.type = LightType.Spot;
+            headlight.range = 70f;
+            headlight.spotAngle = 65f;
+            headlight.intensity = 3f;
+            headlight.color = HeadlightColor;
+            controller.AddLight(headlight);
+            LightBeam.Attach(headlight, HeadlightBeamLength, HeadlightBeamStrength);
+            if (side > 0f)
+                HeadlightGlow.Attach(controller.transform, headlight);
+        }
+        controller.AddLamp(SedanSkin.HeadlightMaterial, HeadlightColor * 3f);
+        controller.AddLamp(SedanSkin.TaillightMaterial, TailEmission * 2f);
+
+        var tail = CreateVehicleLight(controller, "TailLight", new Vector3(0f, -0.1f, -2.72f), Quaternion.Euler(0f, 180f, 0f));
+        tail.type = LightType.Spot;
+        tail.spotAngle = 130f;
+        tail.range = 7f;
+        tail.intensity = 1.5f;
+        tail.color = TailEmission;
+        controller.AddLight(tail);
+    }
+
     static void AddVehicleLights(VehicleController controller)
     {
+        if (SedanSkin.Available)
+        {
+            AddSedanLights(controller);
+            return;
+        }
+
         foreach (float side in new[] { -1f, 1f })
         {
             var headlight = CreateVehicleLight(controller, "Headlight", new Vector3(side * 0.6f, -0.1f, 2.05f), Quaternion.Euler(2.5f, 0f, 0f));

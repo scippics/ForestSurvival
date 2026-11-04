@@ -280,6 +280,8 @@ public class PlayerSeat : MonoBehaviour
     public void Enter(VehicleController target, int seatIndex = DriverSeatIndex)
     {
         ForestAudio.Play(ForestSound.Door, 0.7f);
+        if (target.TryGetComponent(out CarDoors doors))
+            doors.Swing(seatIndex);
         hands.ReleaseHeld();
         hands.enabled = false;
         movement.enabled = false;
@@ -315,6 +317,8 @@ public class PlayerSeat : MonoBehaviour
             return;
 
         ForestAudio.Play(ForestSound.Door, 0.7f);
+        if (Vehicle.TryGetComponent(out CarDoors doors))
+            doors.Swing(SeatIndex);
 
         Rigidbody vehicleBody = Vehicle.GetComponent<Rigidbody>();
         if (IsDriver)

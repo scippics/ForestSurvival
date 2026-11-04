@@ -18,7 +18,7 @@ public static class VehicleInterior
     static readonly Color Chrome = new Color(0.24f, 0.24f, 0.23f);
     static readonly Color BlackMetal = new Color(0.07f, 0.07f, 0.07f);
     static readonly Color Webbing = new Color(0.16f, 0.16f, 0.17f);
-    static readonly Color Sleeve = new Color(0.16f, 0.2f, 0.13f);
+    static readonly Color Sleeve = new Color(0.11f, 0.115f, 0.09f);
     static readonly Color Skin = new Color(0.16f, 0.12f, 0.08f);
     static readonly Color Freshener = new Color(0.05f, 0.24f, 0.09f);
     static readonly Color ToolboxColor = new Color(0.45f, 0.1f, 0.07f);
@@ -38,6 +38,12 @@ public static class VehicleInterior
     {
         Transform vehicle = controller.transform;
         var dash = vehicle.gameObject.AddComponent<VehicleDashboard>();
+
+        if (SedanSkin.Available)
+        {
+            BuildSedanCabin(controller, dash);
+            return;
+        }
 
         BuildShell(vehicle);
         BuildDashboard(vehicle, dash);
@@ -64,6 +70,169 @@ public static class VehicleInterior
         glow.renderMode = LightRenderMode.ForcePixel;
         glow.shadows = LightShadows.None;
         controller.AddLight(glow);
+    }
+
+    // Сиденья, обшивка и панель уже есть в модели седана. Здесь только то, что движется и светится:
+    // приборы, руль, ключ, магнитола, рычаги и зеркало.
+    static void BuildSedanCabin(VehicleController controller, VehicleDashboard dash)
+    {
+        Transform vehicle = controller.transform;
+        const float eyeLevel = 1.14f;
+        float seatY = SedanSkin.Point(0f, eyeLevel, 0f).y - EyeAboveSeatPoint;
+
+        BuildSedanGauges(vehicle, dash);
+        BuildSedanRadio(vehicle, dash);
+        BuildSedanSteering(vehicle, dash);
+        BuildSedanControls(vehicle, dash);
+        BuildMirrorAt(vehicle, dash, SedanSkin.Point(0f, 1.3f, 0.38f));
+
+        controller.IgnitionKey = BuildIgnitionAt(vehicle, SedanSkin.Point(-0.16f, 0.77f, 0.72f));
+        foreach (Vector3 seat in new[] { new Vector3(-0.42f, seatY, -0.15f), new Vector3(0.42f, seatY, -0.15f), new Vector3(-0.42f, seatY, -1.05f), new Vector3(0.42f, seatY, -1.05f) })
+        {
+            var point = new GameObject("SeatPos").transform;
+            point.SetParent(vehicle, false);
+            point.localPosition = seat;
+            controller.Seats.Add(point);
+        }
+        controller.DriverSeat = controller.Seats[0];
+        controller.PassengerSeat = controller.Seats[1];
+
+        // Тёплый свет приборов на руки и низ панели. Слабый: он не должен пересвечивать салон.
+        var glow = new GameObject("DashGlow").AddComponent<Light>();
+        glow.transform.SetParent(vehicle, false);
+        glow.transform.localPosition = SedanSkin.Point(-0.2f, 0.95f, 0.72f);
+        glow.type = LightType.Point;
+        glow.range = 1.8f;
+        glow.intensity = 1.1f;
+        glow.color = DialGlow;
+        glow.renderMode = LightRenderMode.ForcePixel;
+        glow.shadows = LightShadows.None;
+        controller.AddLight(glow);
+    }
+
+    // Глаза выше точки сиденья: камера на 0.7 выше тела, а тело на 0.38 ниже точки.
+    const float EyeAboveSeatPoint = 0.32f;
+
+    static void BuildSedanGauges(Transform vehicle, VehicleDashboard dash)
+    {
+        Vector3 center = SedanSkin.Point(-0.42f, 0.985f, 0.8f);
+        Box(vehicle, "GaugePanel", center + Vector3.forward * 0.006f, new Vector3(0.6f, 0.17f, 0.008f), Inner(BlackMetal));
+        dash.SpeedDial = BuildDial(vehicle, "SpeedDial", center + Vector3.left * 0.12f, 120, 20, "КМ/Ч", out dash.SpeedNeedle);
+        dash.RpmDial = BuildDial(vehicle, "RpmDial", center + Vector3.right * 0.12f, 6, 1, "Х1000", out dash.RpmNeedle);
+
+        dash.HandbrakeLamp = BuildWarningLamp(vehicle, center + new Vector3(-0.012f, 0.03f, -0.002f));
+        dash.HeadlightLamp = BuildWarningLamp(vehicle, center + new Vector3(0.012f, 0.03f, -0.002f));
+        dash.FuelLamp = BuildWarningLamp(vehicle, center + new Vector3(-0.012f, 0.006f, -0.002f));
+        dash.BatteryLamp = BuildWarningLamp(vehicle, center + new Vector3(0.012f, 0.006f, -0.002f));
+        dash.EngineLamp = BuildWarningLamp(vehicle, center + new Vector3(0f, -0.018f, -0.002f));
+        dash.BatteryOnColor = BatteryLamp;
+        dash.EngineOnColor = EngineLamp;
+        dash.HandbrakeOnColor = HandbrakeLamp;
+        dash.HeadlightOnColor = HeadlightLamp;
+        dash.FuelOnColor = FuelLamp;
+
+        // Уровень топлива: шкала правее тахометра.
+        Vector3 fuel = center + new Vector3(0.235f, 0f, -0.002f);
+        Box(vehicle, "FuelGaugeBack", fuel + Vector3.forward * 0.001f, new Vector3(0.012f, 0.094f, 0.002f), Inner(BlackMetal));
+        dash.FuelBarBase = fuel.y - 0.043f;
+        GameObject fuelBar = ProceduralModels.Part(vehicle, "FuelBar", PrimitiveType.Cube, new Vector3(fuel.x, dash.FuelBarBase, fuel.z - 0.001f), new Vector3(0.007f, 0.0005f, 0.001f), ProceduralModels.CreateLit(Color.black));
+        dash.FuelBar = fuelBar.transform;
+        dash.FuelBarMaterial = fuelBar.GetComponent<Renderer>().sharedMaterial;
+    }
+
+    static void BuildSedanRadio(Transform vehicle, VehicleDashboard dash)
+    {
+        Vector3 center = SedanSkin.Point(0.02f, 0.86f, 0.72f);
+
+        // Дефлекторы над магнитолой, под ней печка.
+        Box(vehicle, "VentFrame", center + Vector3.up * 0.075f, new Vector3(0.3f, 0.06f, 0.008f), Inner(BlackMetal));
+        for (int i = 0; i < 9; i++)
+            Box(vehicle, "VentFin", center + new Vector3(-0.13f + i * 0.0325f, 0.075f, -0.005f), new Vector3(0.004f, 0.05f, 0.008f), Inner(PlasticMid));
+
+        Box(vehicle, "RadioFace", center, new Vector3(0.3f, 0.07f, 0.01f), Inner(BlackMetal));
+        GameObject display = ProceduralModels.Part(vehicle, "RadioDisplay", PrimitiveType.Quad, center + Vector3.back * 0.006f, new Vector3(0.15f, 0.034f, 1f), ProceduralModels.CreateLit(Color.black));
+        Material displayMaterial = display.GetComponent<Renderer>().sharedMaterial;
+        displayMaterial.SetTexture("_EmissionMap", ForestTextures.RadioDisplay());
+        dash.RadioDisplay = displayMaterial;
+        dash.RadioGlow = RadioGlow;
+        foreach (float side in new[] { -1f, 1f })
+            Knob(vehicle, "RadioKnob", center + new Vector3(side * 0.117f, 0f, -0.01f), 0.032f, 0.018f, Inner(Chrome, SurfacePlain, 0.5f));
+        for (int i = 0; i < 5; i++)
+            Box(vehicle, "RadioButton", center + new Vector3(-0.056f + i * 0.028f, -0.026f, -0.007f), new Vector3(0.02f, 0.009f, 0.005f), Inner(PlasticMid));
+
+        foreach (float x in new[] { -0.09f, 0f, 0.09f })
+            Knob(vehicle, "HeaterKnob", center + new Vector3(x, -0.075f, -0.004f), 0.04f, 0.018f, Inner(PlasticDark));
+    }
+
+    static void BuildSedanSteering(Transform vehicle, VehicleDashboard dash)
+    {
+        Transform model = SedanSkin.SteeringWheelModel(vehicle);
+        var column = new GameObject("SteeringColumn").transform;
+        column.SetParent(vehicle, false);
+        column.position = model.position;
+
+        dash.SteeringWheel = new GameObject("SteeringWheel").transform;
+        dash.SteeringWheel.SetParent(column, false);
+        model.SetParent(dash.SteeringWheel, true);
+
+        dash.HandPivot = new GameObject("Hands").transform;
+        dash.HandPivot.SetParent(column, false);
+        Material skin = ProceduralModels.Lit(Skin, 0f, 0f, 0.15f, SurfacePlain);
+        Material sleeve = ProceduralModels.Lit(Sleeve, 0f, 0f, 0.1f, SurfaceFabric);
+        foreach (float side in new[] { -1f, 1f })
+        {
+            var hand = new GameObject("Hand").transform;
+            hand.SetParent(dash.HandPivot, false);
+            hand.localPosition = new Vector3(side * 0.172f, 0.03f, -0.05f);
+            ProceduralModels.Part(hand, "Palm", PrimitiveType.Sphere, Vector3.zero, new Vector3(0.075f, 0.09f, 0.06f), skin);
+            for (int finger = 0; finger < 4; finger++)
+                ProceduralModels.Part(hand, "Finger", PrimitiveType.Capsule, new Vector3(-side * 0.012f, 0.034f - finger * 0.022f, 0.02f), new Vector3(0.018f, 0.024f, 0.018f), skin, Quaternion.Euler(0f, 0f, side * 88f));
+
+            GameObject arm = ProceduralModels.Part(vehicle, "Forearm", PrimitiveType.Cylinder, Vector3.zero, new Vector3(0.07f, 0.3f, 0.07f), sleeve);
+            dash.AddArm(hand, arm.transform, column.localPosition + new Vector3(side * 0.3f, -0.2f, -0.42f));
+        }
+    }
+
+    static void BuildSedanControls(Transform vehicle, VehicleDashboard dash)
+    {
+        Vector3 shifter = SedanSkin.Point(0f, 0.58f, 0.42f);
+        Box(vehicle, "ShifterBoot", shifter, new Vector3(0.11f, 0.03f, 0.11f), Inner(BlackMetal, SurfaceRubber));
+        ProceduralModels.Part(vehicle, "ShiftStick", PrimitiveType.Cylinder, shifter + new Vector3(0f, 0.065f, -0.01f), new Vector3(0.014f, 0.07f, 0.014f), Inner(Chrome, SurfacePlain, 0.6f), Quaternion.Euler(-8f, 0f, 0f));
+        ProceduralModels.Part(vehicle, "ShiftKnob", PrimitiveType.Sphere, shifter + new Vector3(0f, 0.14f, -0.02f), Vector3.one * 0.04f, Inner(BlackMetal, SurfacePlain, 0.55f));
+
+        dash.HandbrakeLever = new GameObject("HandbrakeLever").transform;
+        dash.HandbrakeLever.SetParent(vehicle, false);
+        dash.HandbrakeLever.localPosition = SedanSkin.Point(0f, 0.62f, -0.34f);
+        ProceduralModels.Part(dash.HandbrakeLever, "LeverRod", PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.13f), new Vector3(0.024f, 0.13f, 0.024f), Inner(Chrome, SurfacePlain, 0.6f), Quaternion.Euler(90f, 0f, 0f));
+        ProceduralModels.Part(dash.HandbrakeLever, "LeverGrip", PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.27f), new Vector3(0.036f, 0.08f, 0.036f), Inner(BlackMetal, SurfaceRubber), Quaternion.Euler(90f, 0f, 0f));
+        Knob(dash.HandbrakeLever, "LeverButton", new Vector3(0f, 0f, 0.36f), 0.018f, 0.012f, Inner(Chrome, SurfacePlain, 0.7f));
+    }
+
+    static void BuildMirrorAt(Transform vehicle, VehicleDashboard dash, Vector3 center)
+    {
+        GameObject glass = ProceduralModels.Part(vehicle, "MirrorGlass", PrimitiveType.Quad, center, new Vector3(0.25f, 0.065f, 1f), ProceduralModels.CreateLit(Color.black));
+        dash.MirrorGlass = glass.GetComponent<Renderer>().sharedMaterial;
+
+        dash.Freshener = new GameObject("Freshener").transform;
+        dash.Freshener.SetParent(vehicle, false);
+        dash.Freshener.localPosition = center + new Vector3(0f, -0.04f, 0f);
+        Box(dash.Freshener, "String", new Vector3(0f, -0.035f, 0f), new Vector3(0.002f, 0.07f, 0.002f), Inner(Chrome));
+        Material green = ProceduralModels.Lit(Freshener, 0f, 0f, 0.1f, SurfacePlain);
+        Box(dash.Freshener, "TreeLow", new Vector3(0f, -0.09f, 0f), new Vector3(0.05f, 0.04f, 0.002f), green);
+        Box(dash.Freshener, "TreeMid", new Vector3(0f, -0.07f, 0f), new Vector3(0.034f, 0.03f, 0.002f), green);
+        Box(dash.Freshener, "TreeTop", new Vector3(0f, -0.052f, 0f), new Vector3(0.016f, 0.03f, 0.002f), green);
+        Box(dash.Freshener, "TreeStem", new Vector3(0f, -0.118f, 0f), new Vector3(0.008f, 0.02f, 0.002f), Inner(Upholstery, SurfacePlain));
+    }
+
+    static Transform BuildIgnitionAt(Transform vehicle, Vector3 position)
+    {
+        Knob(vehicle, "IgnitionLock", position, 0.075f, 0.012f, Inner(Chrome, SurfacePlain, 0.65f));
+        var key = new GameObject("IgnitionKey").transform;
+        key.SetParent(vehicle, false);
+        key.localPosition = position + Vector3.back * 0.006f;
+        Box(key, "KeyBlade", new Vector3(0f, 0f, -0.024f), new Vector3(0.018f, 0.005f, 0.05f), Inner(Chrome, SurfacePlain, 0.75f));
+        Box(key, "KeyBow", new Vector3(0f, 0f, -0.066f), new Vector3(0.075f, 0.02f, 0.05f), Inner(ToolboxColor, SurfacePlain, 0.4f));
+        return key;
     }
 
     static Material Inner(Color color, int surface = SurfacePlastic, float smoothness = 0.2f)

@@ -12,12 +12,19 @@ public class CarLoad : MonoBehaviour
     const int MaxOverlaps = 32;
 
     // Над капотом, над багажником и над крышей. Сбоку от машины не считается: там просто стоят рядом.
-    static readonly Bounds[] Zones =
-    {
-        new Bounds(new Vector3(0f, 0.7f, 1.55f), new Vector3(1.75f, 1f, 1.15f)),
-        new Bounds(new Vector3(0f, 0.85f, -1.65f), new Vector3(1.75f, 1.15f, 0.95f)),
-        new Bounds(new Vector3(0f, 1.45f, -0.1f), new Vector3(1.75f, 1f, 2.15f))
-    };
+    static readonly Bounds[] Zones = SedanSkin.Available
+        ? new[]
+        {
+            new Bounds(new Vector3(0f, 0.65f, 1.8f), new Vector3(1.75f, 1f, 1.3f)),
+            new Bounds(new Vector3(0f, 0.65f, -2f), new Vector3(1.75f, 1f, 1.6f)),
+            new Bounds(new Vector3(0f, 1.05f, -0.4f), new Vector3(1.75f, 1f, 2f))
+        }
+        : new[]
+        {
+            new Bounds(new Vector3(0f, 0.7f, 1.55f), new Vector3(1.75f, 1f, 1.15f)),
+            new Bounds(new Vector3(0f, 0.85f, -1.65f), new Vector3(1.75f, 1.15f, 0.95f)),
+            new Bounds(new Vector3(0f, 1.45f, -0.1f), new Vector3(1.75f, 1f, 2.15f))
+        };
 
     public float LoadMass { get; private set; }
     public Vector3 LoadPoint { get; private set; }

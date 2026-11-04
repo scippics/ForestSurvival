@@ -30,6 +30,9 @@ public class WindshieldWater : MonoBehaviour
     void Awake()
     {
         material = new Material(Resources.Load<Shader>("ForestWiperMask"));
+        bool sedan = SedanSkin.Available;
+        Shader.SetGlobalFloat("_ForestGlassBottom", sedan ? SedanSkin.GlassBottom : 0.2f);
+        material.SetFloat("_SlopeScale", sedan ? SedanSkin.GlassSlopeScale : 1f);
         current = CreateMask();
         next = CreateMask();
         Shader.SetGlobalTexture(MaskId, current);
@@ -73,8 +76,8 @@ public class WindshieldWater : MonoBehaviour
         run += (RunGravity - Mathf.Max(airSpeed, 0f) * RunAirflow) * dt;
         Shader.SetGlobalFloat(RunId, run);
 
-        Vector3 left = VehicleExterior.Wipers[0].localPosition;
-        Vector3 right = VehicleExterior.Wipers[1].localPosition;
+        Vector3 left = transform.InverseTransformPoint(VehicleExterior.Wipers[0].position);
+        Vector3 right = transform.InverseTransformPoint(VehicleExterior.Wipers[1].position);
         material.SetVector(PivotsId, new Vector4(left.x, left.y, right.x, right.y));
         material.SetVector(SweepId, new Vector4(
             Mathf.Min(angleBefore, angleNow) * Mathf.Deg2Rad,

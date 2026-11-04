@@ -15,7 +15,7 @@ public class FirstPersonArms : MonoBehaviour
     static readonly Vector3 RightShoulder = new Vector3(0.3f, -0.42f, -0.05f);
     static readonly Vector3 TorchHand = new Vector3(0.2f, -0.22f, 0.42f);
     const float CabinArmShade = 0.7f;
-    static readonly Color SleeveColor = new Color(0.16f, 0.2f, 0.13f);
+    static readonly Color SleeveColor = new Color(0.11f, 0.115f, 0.09f);
     static readonly Color GloveColor = new Color(0.16f, 0.12f, 0.08f);
     static readonly Color TorchColor = new Color(0.09f, 0.09f, 0.08f);
 

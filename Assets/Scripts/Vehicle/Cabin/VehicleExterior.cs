@@ -176,6 +176,28 @@ public static class VehicleExterior
         }
     }
 
+    // Щётки седана лежат на наклонном стекле: узел наклонён вместе с ним, а сами щётки качаются как обычно.
+    public static void BuildWipers(Transform vehicle)
+    {
+        Material rubber = Clean(Rubber, 0.25f);
+        var mount = new GameObject("WiperMount").transform;
+        mount.SetParent(vehicle, false);
+        mount.localPosition = SedanSkin.Point(0f, 0.985f, 1.36f);
+        mount.localRotation = Quaternion.Euler(-49f, 0f, 0f);
+
+        Wipers.Clear();
+        foreach (float x in new[] { -0.28f, 0.48f })
+        {
+            var pivot = new GameObject("WiperPivot").transform;
+            pivot.SetParent(mount, false);
+            pivot.localPosition = new Vector3(x, 0f, 0.01f);
+            pivot.localRotation = Quaternion.Euler(0f, 0f, WiperRestAngle);
+            Tube(pivot, "WiperArm", Vector3.zero, new Vector3(0f, 0.33f, 0f), 0.006f, Clean(Dark));
+            Box(pivot, "WiperBlade", new Vector3(0f, 0.33f, 0.006f), new Vector3(0.02f, 0.5f, 0.016f), rubber);
+            Wipers.Add(pivot);
+        }
+    }
+
     static void BuildFront(Transform vehicle)
     {
         Material tube = Clean(Dark, 0.25f);

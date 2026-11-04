@@ -165,6 +165,11 @@ public class VehicleController : MonoBehaviour
         ForestLights.Register(vehicleLight);
     }
 
+    public void AddLamp(Material lampMaterial, Color emission)
+    {
+        lamps.Add(new Lamp { Material = lampMaterial, Emission = emission });
+    }
+
     public void AddLamp(Renderer lampRenderer, Color emission)
     {
         lamps.Add(new Lamp { Material = lampRenderer.sharedMaterial, Emission = emission });

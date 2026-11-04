@@ -24,6 +24,7 @@ Shader "Forest/Glass"
             sampler2D _ForestWindshieldWater;
             float _ForestRain;
             float _ForestGlassRun;
+            float _ForestGlassBottom;
 
             struct v2f
             {
@@ -116,9 +117,9 @@ Shader "Forest/Glass"
                 float alpha = 0.02 + dust + fresnel * 0.45;
 
                 // На лобовом стекле вода своя: её стирают щётки. На остальных стёклах она просто идёт за дождём.
-                bool front = i.local.z > 0.9;
+                bool front = i.local.z > 0.3 && mul((float3x3)_ForestVehicleWorldToLocal, normalize(i.normal)).z > 0.4;
                 float wet = front
-                    ? tex2D(_ForestWindshieldWater, float2(i.local.x / 1.68 + 0.5, (i.local.y - 0.2) / 0.66)).r
+                    ? tex2D(_ForestWindshieldWater, float2(i.local.x / 1.68 + 0.5, (i.local.y - _ForestGlassBottom) / 0.66)).r
                     : _ForestRain;
 
                 if (wet > 0.01)

@@ -26,6 +26,7 @@ public class VehicleDashboard : MonoBehaviour
     const float WornEngine = 0.4f;
 
     public const float FuelBarBottom = 0.248f;
+    public float FuelBarBase = FuelBarBottom;
     public const float FuelBarHeight = 0.086f;
 
     const float DialDayGlow = 0.75f;
@@ -179,7 +180,7 @@ public class VehicleDashboard : MonoBehaviour
         shownFuel = Mathf.Lerp(shownFuel, controller.FuelFraction, blend);
         FuelBar.localScale = new Vector3(FuelBar.localScale.x, Mathf.Max(0.0005f, FuelBarHeight * shownFuel), FuelBar.localScale.z);
         Vector3 position = FuelBar.localPosition;
-        position.y = FuelBarBottom + FuelBarHeight * shownFuel * 0.5f;
+        position.y = FuelBarBase + FuelBarHeight * shownFuel * 0.5f;
         FuelBar.localPosition = position;
     }
 

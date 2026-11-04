@@ -112,6 +112,17 @@ public class CarUpgrades : MonoBehaviour
         Instance = this;
         car = GetComponent<VehicleController>();
         body = GetComponent<Rigidbody>();
+
+        // У седана другие размеры, а детали крепятся к его кузову.
+        if (SedanSkin.Available)
+        {
+            SlotPoints[CarSlot.Front] = new Vector3(0f, -0.2f, 2.5f);
+            SlotPoints[CarSlot.Roof] = new Vector3(0f, 0.6f, -0.4f);
+            SlotPoints[CarSlot.Sides] = new Vector3(0.95f, -0.25f, -0.1f);
+            SlotPoints[CarSlot.Rear] = new Vector3(0f, -0.25f, -2.72f);
+            SlotPoints[CarSlot.Wheels] = new Vector3(SedanSkin.Track, -0.35f, 1.4f);
+            SlotPoints[CarSlot.Engine] = new Vector3(0f, 0.1f, 1.7f);
+        }
     }
 
     public static Vector3 SlotPoint(CarSlot slot)
