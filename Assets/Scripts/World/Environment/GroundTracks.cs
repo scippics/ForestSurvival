@@ -118,8 +118,6 @@ public class GroundTracks : MonoBehaviour
 public class WheelTracks : MonoBehaviour
 {
     const float StepDistance = 0.35f;
-    const float RayHeight = 1f;
-    const float RayLength = 1.8f;
     const float TyreWidth = 0.26f;
     const float MaxGap = 3f;
 
@@ -141,12 +139,13 @@ public class WheelTracks : MonoBehaviour
 
         for (int i = 0; i < last.Length; i++)
         {
-            Vector3 wheel = car.Wheels[i].Collider.transform.position;
+            WheelCollider wheelCollider = car.Wheels[i].Collider;
+            Vector3 wheel = wheelCollider.transform.position;
             if (valid[i] && (wheel - last[i]).sqrMagnitude < StepDistance * StepDistance)
                 continue;
 
-            if (!Physics.Raycast(wheel + Vector3.up * RayHeight, Vector3.down, out RaycastHit hit, RayLength + RayHeight, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                || !hit.collider.CompareTag(OptimizedForestGenerator.TerrainTag))
+            // Точку касания знает само колесо: луч сверху попал бы в кузов, если колесо стоит под ним.
+            if (!wheelCollider.GetGroundHit(out WheelHit hit) || !hit.collider.CompareTag(OptimizedForestGenerator.TerrainTag))
             {
                 valid[i] = false;
                 continue;
