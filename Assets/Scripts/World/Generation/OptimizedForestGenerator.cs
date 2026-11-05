@@ -205,6 +205,7 @@ public class OptimizedForestGenerator : MonoBehaviour
     readonly Dictionary<Vector2Int, Chunk> chunks = new Dictionary<Vector2Int, Chunk>();
     readonly List<Vector2Int> chunksToRemove = new List<Vector2Int>();
     readonly List<Chunk> pendingGrass = new List<Chunk>();
+    float grassDensity = 1f;
     readonly List<Chunk> pendingTerrain = new List<Chunk>();
     readonly Stack<CapsuleCollider> colliderPool = new Stack<CapsuleCollider>();
     readonly Stack<Matrix4x4[]> batchPool = new Stack<Matrix4x4[]>();
@@ -353,6 +354,9 @@ public class OptimizedForestGenerator : MonoBehaviour
             centerChunk = center;
             RefreshChunks();
         }
+
+        if (grassDensity != GameSettings.GrassDensity)
+            RegrowGrass();
 
         GenerateNextTerrain();
         GenerateNextGrass();
@@ -1221,6 +1225,27 @@ public class OptimizedForestGenerator : MonoBehaviour
         return capsule;
     }
 
+    // Качество поменяли на ходу: уже выросшая трава пересаживается с новой густотой, ближние чанки первыми.
+    void RegrowGrass()
+    {
+        grassDensity = GameSettings.GrassDensity;
+        foreach (Chunk chunk in chunks.Values)
+        {
+            if (chunk.GrassCount == 0)
+                continue;
+            foreach (Matrix4x4[] batch in chunk.GrassBatches)
+                batchPool.Push(batch);
+            chunk.GrassBatches.Clear();
+            ActiveGrassBlades -= chunk.GrassCount;
+            chunk.GrassCount = 0;
+            if (!chunk.GrassPending)
+            {
+                chunk.GrassPending = true;
+                pendingGrass.Add(chunk);
+            }
+        }
+    }
+
     void GenerateNextGrass()
     {
         if (pendingGrass.Count == 0)
@@ -1260,7 +1285,7 @@ public class OptimizedForestGenerator : MonoBehaviour
 
                 // Шум задаёт вероятность, а не порог: края куч получаются рваными.
                 float clump = Mathf.PerlinNoise(x * GrassClumpFrequency + NoiseOffset, z * GrassClumpFrequency + NoiseOffset);
-                if (roll >= Mathf.InverseLerp(GrassNoiseMin, GrassNoiseMax, clump))
+                if (roll >= Mathf.InverseLerp(GrassNoiseMin, GrassNoiseMax, clump) * grassDensity)
                     continue;
                 if (IsBlockedForGrass(x, z, roadCenter))
                     continue;

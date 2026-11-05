@@ -14,7 +14,7 @@ public class ForestPostProcess : MonoBehaviour
     const int PassRayBlur = 6;
     const int PassComposite = 7;
 
-    const int BloomLevels = 4;
+    const int MaxBloomLevels = 4;
     const float AoRadius = 1.3f;
     const float AoStrength = 2.6f;
     const float BloomThreshold = 1f;
@@ -49,7 +49,7 @@ public class ForestPostProcess : MonoBehaviour
     Camera view;
     Light sun;
     Material material;
-    readonly RenderTexture[] bloomChain = new RenderTexture[BloomLevels];
+    readonly RenderTexture[] bloomChain = new RenderTexture[MaxBloomLevels];
 
     void Awake()
     {
@@ -70,9 +70,13 @@ public class ForestPostProcess : MonoBehaviour
 
     void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        RenderTexture ao = RenderAo(source);
+        // На низком качестве нет затенения углов, на низком и среднем нет лучей солнца:
+        // проход пропускается, а в сборку идёт текстура, которая ничего не меняет.
+        RenderTexture ao = GameSettings.AmbientOcclusion ? RenderAo(source) : Blank(Texture2D.whiteTexture);
         RenderTexture bloom = RenderBloom(source);
-        RenderTexture rays = RenderRays(source);
+        RenderTexture rays = GameSettings.SunRays ? RenderRays(source) : Blank(Texture2D.blackTexture);
+        if (!GameSettings.SunRays)
+            material.SetFloat(RayStrengthId, 0f);
 
         material.SetFloat(FogDensityId, RenderSettings.fogDensity);
         material.SetFloat(GrainTimeId, Time.unscaledTime % 97f * 61f);
@@ -84,6 +88,13 @@ public class ForestPostProcess : MonoBehaviour
         RenderTexture.ReleaseTemporary(ao);
         RenderTexture.ReleaseTemporary(bloom);
         RenderTexture.ReleaseTemporary(rays);
+    }
+
+    static RenderTexture Blank(Texture fill)
+    {
+        RenderTexture blank = RenderTexture.GetTemporary(4, 4, 0, RenderTextureFormat.ARGBHalf);
+        Graphics.Blit(fill, blank);
+        return blank;
     }
 
     RenderTexture RenderAo(RenderTexture source)
@@ -111,9 +122,10 @@ public class ForestPostProcess : MonoBehaviour
         int height = source.height / 2;
         RenderTextureFormat format = source.format;
 
+        int levels = Mathf.Clamp(GameSettings.BloomLevels, 1, MaxBloomLevels);
         bloomChain[0] = RenderTexture.GetTemporary(width, height, 0, format);
         Graphics.Blit(source, bloomChain[0], material, PassBloomPrefilter);
-        for (int level = 1; level < BloomLevels; level++)
+        for (int level = 1; level < levels; level++)
         {
             width = Mathf.Max(width / 2, 2);
             height = Mathf.Max(height / 2, 2);
@@ -121,7 +133,7 @@ public class ForestPostProcess : MonoBehaviour
             Graphics.Blit(bloomChain[level - 1], bloomChain[level], material, PassBloomDown);
         }
 
-        for (int level = BloomLevels - 1; level > 0; level--)
+        for (int level = levels - 1; level > 0; level--)
         {
             Graphics.Blit(bloomChain[level], bloomChain[level - 1], material, PassBloomUp);
             RenderTexture.ReleaseTemporary(bloomChain[level]);

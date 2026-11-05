@@ -89,13 +89,29 @@ public static class GameSettings
         Application.targetFrameRate = -1;
     }
 
+    // Доля травы от полной густоты и включённые эффекты постобработки. Лес и камера читают их каждый кадр,
+    // поэтому смена качества видна сразу, без перезапуска.
+    public static float GrassDensity { get; private set; } = 1f;
+    public static bool AmbientOcclusion { get; private set; } = true;
+    public static bool SunRays { get; private set; } = true;
+    public static int BloomLevels { get; private set; } = 4;
+
     static void ApplyQuality(int level)
     {
-        QualitySettings.shadows = ShadowQuality.All;
-        QualitySettings.shadowResolution = level == 0 ? ShadowResolution.Medium : level == 1 ? ShadowResolution.High : ShadowResolution.VeryHigh;
-        QualitySettings.shadowCascades = level == 0 ? 2 : 4;
-        QualitySettings.shadowDistance = level == 0 ? 28f : level == 1 ? 36f : 45f;
-        QualitySettings.pixelLightCount = level == 0 ? 3 : level == 1 ? 4 : 6;
-        QualitySettings.antiAliasing = level == 0 ? 0 : level == 1 ? 2 : 4;
+        level = Mathf.Clamp(level, 0, QualityNames.Length - 1);
+        QualitySettings.shadows = level == 0 ? ShadowQuality.HardOnly : ShadowQuality.All;
+        QualitySettings.shadowResolution = level == 0 ? ShadowResolution.Low : level == 1 ? ShadowResolution.High : ShadowResolution.VeryHigh;
+        QualitySettings.shadowCascades = level == 0 ? 1 : level == 1 ? 2 : 4;
+        QualitySettings.shadowDistance = level == 0 ? 18f : level == 1 ? 32f : 50f;
+        QualitySettings.pixelLightCount = level == 0 ? 2 : level == 1 ? 4 : 6;
+        QualitySettings.antiAliasing = level == 0 ? 0 : level == 1 ? 2 : 8;
+        QualitySettings.globalTextureMipmapLimit = level == 0 ? 1 : 0;
+        QualitySettings.anisotropicFiltering = level == 0 ? AnisotropicFiltering.Disable : AnisotropicFiltering.ForceEnable;
+        QualitySettings.lodBias = level == 0 ? 0.6f : level == 1 ? 1f : 1.6f;
+
+        GrassDensity = level == 0 ? 0.45f : level == 1 ? 0.75f : 1f;
+        AmbientOcclusion = level > 0;
+        SunRays = level == 2;
+        BloomLevels = level == 0 ? 2 : 4;
     }
 }

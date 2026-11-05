@@ -71,9 +71,8 @@ public static class RuntimeBootstrapper
         RenderSettings.fogDensity = FogDensity;
 
         // Дальше тумана ничего не видно: не тратим на это ни разрешение теней, ни отрисовку.
-        // Сами тени и сглаживание зависят от выбранного качества.
+        // Тени, сглаживание, текстуры, трава и эффекты зависят от выбранного качества.
         GameSettings.Apply();
-        QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
 
         var sun = new GameObject("Sun").AddComponent<Light>();
         sun.type = LightType.Directional;
