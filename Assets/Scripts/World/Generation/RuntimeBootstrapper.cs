@@ -48,7 +48,9 @@ public static class RuntimeBootstrapper
         new GameObject("Forest").AddComponent<OptimizedForestGenerator>();
         new GameObject("Atmosphere").AddComponent<ForestAtmosphere>();
         new GameObject("Audio").AddComponent<ForestAudio>();
-        new GameObject("Weather").AddComponent<ForestWeather>();
+        var weather = new GameObject("Weather");
+        weather.AddComponent<ForestWeather>();
+        weather.AddComponent<ForestStorm>();
         new GameObject("Watcher").AddComponent<ForestWatcher>();
         new GameObject("GroundTracks").AddComponent<GroundTracks>();
 

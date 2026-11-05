@@ -20,7 +20,6 @@ public class ForestWeather : MonoBehaviour
 
     // Струя у самой камеры не должна становиться толстой белой полосой на весь экран.
     const float MaxDropScreenSize = 0.007f;
-    const float ThunderMinRain = 0.6f;
     const float CalmWind = 0.65f;
     const float StormWind = 1.9f;
     const float GustSize = 0.7f;
@@ -41,13 +40,15 @@ public class ForestWeather : MonoBehaviour
 
     public bool IsRaining => raining;
 
+    // Скоро пойдёт дождь: тучи затягивают небо заранее. Клиент этого не знает и ждёт первых капель.
+    public bool RainComing(float leadSeconds) => !followsHost && !raining && nextChange - Time.time < leadSeconds;
+
     ParticleSystem drops;
     ParticleSystem splashes;
     Light sun;
     bool raining;
     bool followsHost;
     float nextChange;
-    float nextThunder;
 
     public void ForceRain(bool on, bool instantly)
     {
@@ -68,7 +69,6 @@ public class ForestWeather : MonoBehaviour
     {
         sun = FindAnyObjectByType<DayNightCycle>().GetComponent<Light>();
         nextChange = Time.time + Random.Range(FirstRainMinSeconds, FirstRainMaxSeconds);
-        nextThunder = Time.time + 20f;
         CreateDrops();
         CreateSplashes();
     }
@@ -197,10 +197,5 @@ public class ForestWeather : MonoBehaviour
         ParticleSystem.EmissionModule splashEmission = splashes.emission;
         splashEmission.rateOverTime = SplashesPerSecond * Rain;
 
-        if (Rain > ThunderMinRain && now > nextThunder)
-        {
-            nextThunder = now + Random.Range(35f, 90f);
-            ForestAudio.Play(ForestSound.Thunder, Random.Range(0.35f, 0.7f));
-        }
     }
 }
