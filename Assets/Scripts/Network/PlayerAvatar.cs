@@ -38,6 +38,8 @@ public class PlayerAvatar : NetworkBehaviour
     const float CarClearWidth = 1.35f;
     const float CarClearLength = 3.1f;
     const float CarClearHeight = 2f;
+    const string KuzmichModel = "Kuzmich";
+    const float KuzmichFeet = -0.9f;
     float shownYaw;
     float shownPitch;
 
@@ -63,6 +65,8 @@ public class PlayerAvatar : NetworkBehaviour
         var body = GetComponent<Rigidbody>();
         ProceduralModels.PaintMannequin(bodyPivot, NetworkObject.IsPlayerObject ? OwnerClientId : ulong.MaxValue);
         gameObject.AddComponent<CharacterAnimator>();
+        if (!NetworkObject.IsPlayerObject)
+            SkinnedCharacter.TryApply(bodyPivot, KuzmichModel, KuzmichFeet);
 
         if (!IsLocal)
         {
